@@ -1,0 +1,6 @@
+.env
+.ESCR_SAPvenv/
+__pycache__/
+*.pyc
+*.pyo
+logs/

@@ -1,0 +1,9 @@
+hdbcli
+psycopg[binary]
+python-dotenv
+pandas
+loguru
+tenacity
+pydantic
+openpyxl
+requests
