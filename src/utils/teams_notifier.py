@@ -85,6 +85,8 @@ def _build_fact_set(execution_summary: Dict[str, Any]) -> List[Dict[str, str]]:
     return [
         {"title": "Início", "value": _safe_text(execution_summary.get("started_at"))},
         {"title": "Fim", "value": _safe_text(execution_summary.get("finished_at"))},
+        {"title": "Notas aptas", "value": _safe_text(summary.get("total_notas_aptas"))},
+        {"title": "Pendentes", "value": _safe_text(summary.get("total_notas_pendentes"))},
         {"title": "Sucesso", "value": _safe_text(summary.get("processos_sucesso"))},
         {"title": "Sem dados", "value": _safe_text(summary.get("processos_sem_dados"))},
         {"title": "Erros", "value": _safe_text(summary.get("processos_erro"))},
@@ -193,7 +195,16 @@ def _build_process_row(proc: Dict[str, Any]) -> Dict[str, Any]:
                         "text": _safe_text(proc.get("rows_processed")),
                         "horizontalAlignment": "Center",
                         "size": "Small",
-                    }
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": f"{_safe_text(proc.get('rows_aptas'))} aptas",
+                        "horizontalAlignment": "Center",
+                        "size": "Small",
+                        "isSubtle": True,
+                        "spacing": "None",
+                        "color": "Good",
+                    },
                 ],
             },
             {

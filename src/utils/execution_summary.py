@@ -59,6 +59,16 @@ def build_execution_summary(
         for proc in processos_executados
     )
 
+    total_notas_aptas = sum(
+        int(proc.get("rows_aptas", 0) or 0)
+        for proc in processos_executados
+    )
+
+    total_notas_pendentes = sum(
+        int(proc.get("rows_pendentes", 0) or 0)
+        for proc in processos_executados
+    )
+
     processos_formatados: List[Dict[str, Any]] = []
     for proc in processos_executados:
         proc_duration = round(float(proc.get("duration_seconds", 0) or 0), 4)
@@ -68,6 +78,8 @@ def build_execution_summary(
                 "process_name": proc.get("process_name"),
                 "status": proc.get("status"),
                 "rows_processed": int(proc.get("rows", 0) or 0),
+                "rows_aptas": int(proc.get("rows_aptas", 0) or 0),
+                "rows_pendentes": int(proc.get("rows_pendentes", 0) or 0),
                 "duration_seconds": proc_duration,
                 "duration_formatted": format_duration(proc_duration),
             }
@@ -100,6 +112,8 @@ def build_execution_summary(
             "processos_sem_dados": processos_sem_dados,
             "processos_erro": processos_erro,
             "total_linhas_processadas": total_linhas_processadas,
+            "total_notas_aptas": total_notas_aptas,
+            "total_notas_pendentes": total_notas_pendentes,
         },
         "processos_executados": processos_formatados,
         "processos_com_erro": processos_com_erro,

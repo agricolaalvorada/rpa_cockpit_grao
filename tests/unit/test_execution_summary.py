@@ -29,13 +29,17 @@ def _args(executados, com_erro):
 
 def test_summary_sucesso():
     s = build_execution_summary(**_args(
-        [{"process_name": "P1", "status": "SUCESSO", "rows": 10, "duration_seconds": 5}],
+        [{"process_name": "P1", "status": "SUCESSO", "rows": 10, "duration_seconds": 5,
+          "rows_aptas": 7, "rows_pendentes": 3}],
         [],
     ))
     assert s["status"] == "SUCESSO"
     assert s["success"] is True
     assert s["summary"]["processos_sucesso"] == 1
     assert s["summary"]["total_linhas_processadas"] == 10
+    assert s["summary"]["total_notas_aptas"] == 7
+    assert s["summary"]["total_notas_pendentes"] == 3
+    assert s["processos_executados"][0]["rows_aptas"] == 7
     assert s["duration_seconds"] == 30.0
 
 

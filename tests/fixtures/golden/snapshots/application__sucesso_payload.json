@@ -17,13 +17,17 @@
     "processos_sucesso": 1,
     "processos_sem_dados": 0,
     "processos_erro": 0,
-    "total_linhas_processadas": 1
+    "total_linhas_processadas": 1,
+    "total_notas_aptas": 1,
+    "total_notas_pendentes": 0
   },
   "processos_executados": [
     {
       "process_name": "V2_Consulta_Comp_CTRFIXO",
       "status": "SUCESSO",
       "rows_processed": 1,
+      "rows_aptas": 1,
+      "rows_pendentes": 0,
       "duration_seconds": 0.0,
       "duration_formatted": "00:00:00"
     }

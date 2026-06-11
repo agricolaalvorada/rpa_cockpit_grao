@@ -37,12 +37,16 @@ def _registrar_resultado_processo(
     status: str,
     rows: int,
     duration_seconds: float,
+    rows_aptas: int = 0,
+    rows_pendentes: int = 0,
 ) -> None:
     processos_executados.append(
         {
             "process_name": process_name,
             "status": status,
             "rows": int(rows or 0),
+            "rows_aptas": int(rows_aptas or 0),
+            "rows_pendentes": int(rows_pendentes or 0),
             "duration_seconds": round(float(duration_seconds or 0), 4),
         }
     )
@@ -235,12 +239,26 @@ class Application:
                         )
                         logger.info(SEPARADOR)
 
+                    status_col = (
+                        df["status_execucao"] if "status_execucao" in df.columns else None
+                    )
+                    rows_aptas = (
+                        int((status_col == StatusProcesso.SUCESSO.value).sum())
+                        if status_col is not None else 0
+                    )
+                    rows_pendentes = (
+                        int((status_col == StatusProcesso.SEM_RETORNO.value).sum())
+                        if status_col is not None else 0
+                    )
+
                     _registrar_resultado_processo(
                         processos_executados=processos_executados,
                         process_name=processo.process_name,
                         status=StatusProcesso.SUCESSO.value,
                         rows=len(df_prepared),
                         duration_seconds=(self._now() - processo_inicio).total_seconds(),
+                        rows_aptas=rows_aptas,
+                        rows_pendentes=rows_pendentes,
                     )
 
                 except Exception as exc_processo:
