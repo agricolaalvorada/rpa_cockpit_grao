@@ -4,6 +4,8 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List
 
+from src.domain.enums import StatusExecucaoGlobal, StatusProcesso
+
 
 SEPARADOR = "-" * 5
 SEPARADOR_PRINCIPAL = "=" * 5
@@ -41,13 +43,13 @@ def build_execution_summary(
     processos_sucesso = sum(
         1
         for proc in processos_executados
-        if str(proc.get("status", "")).upper() == "SUCESSO"
+        if str(proc.get("status", "")).upper() == StatusProcesso.SUCESSO.value
     )
 
     processos_sem_dados = sum(
         1
         for proc in processos_executados
-        if str(proc.get("status", "")).upper() == "SEM_DADOS"
+        if str(proc.get("status", "")).upper() == StatusProcesso.SEM_DADOS.value
     )
 
     processos_erro = len(processos_com_erro)
@@ -72,13 +74,13 @@ def build_execution_summary(
         )
 
     if processos_erro == 0:
-        status_final = "SUCESSO"
+        status_final = StatusExecucaoGlobal.SUCESSO.value
         message = "Execução finalizada com sucesso."
     elif processos_sucesso > 0 or processos_sem_dados > 0:
-        status_final = "PARCIAL"
+        status_final = StatusExecucaoGlobal.PARCIAL.value
         message = "Execução finalizada com falhas parciais."
     else:
-        status_final = "ERRO"
+        status_final = StatusExecucaoGlobal.ERRO.value
         message = "Execução finalizada com erro."
 
     return {

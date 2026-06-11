@@ -7,6 +7,18 @@ import pandas as pd
 
 from src.connectors.postgres_connector import PostgresConnector
 
+# Chave natural do resultado (mantém histórico de tentativas: status no fim).
+# Deve casar com o índice único criado pela migração (_migra_dedup.py).
+UPSERT_KEY_COLS = [
+    "process_name", "doc_compra", "n_contrato", "numero_cockpit", "docnum", "status_execucao",
+]
+UPSERT_INDEX_NAME = "ix_uq_tb_resultado_final_hana"
+_UPSERT_KEY_SQL = (
+    "process_name, COALESCE(doc_compra,''), COALESCE(n_contrato,''), "
+    "COALESCE(numero_cockpit,''), COALESCE(docnum,''), status_execucao"
+)
+_UPSERT_CONFLICT_SQL = "(%s)" % _UPSERT_KEY_SQL
+
 
 class ResultadoService:
     def __init__(self, postgres: PostgresConnector, default_schema: str):
@@ -113,4 +125,18 @@ class ResultadoService:
         if truncate_before_insert and self.postgres.table_exists(schema_name, table_name):
             self.postgres.truncate_table(schema_name, table_name)
 
-        self.postgres.insert_dataframe(schema_name, table_name, prepared_df)
+        # garante a chave única e faz UPSERT (em vez de INSERT append-only) para
+        # não duplicar a tabela a cada ciclo, preservando o histórico de tentativas.
+        self._garantir_chave_unica(table_name, schema_name)
+        self.postgres.upsert_dataframe(
+            schema_name, table_name, prepared_df, _UPSERT_CONFLICT_SQL
+        )
+
+    def _garantir_chave_unica(self, table_name: str, schema_name: str) -> None:
+        existing = set(self.postgres.get_table_columns(schema_name, table_name))
+        for col in UPSERT_KEY_COLS:
+            if col not in existing:
+                self.postgres.add_column(schema_name, table_name, col, "TEXT")
+        self.postgres.ensure_unique_index(
+            schema_name, table_name, _UPSERT_KEY_SQL, UPSERT_INDEX_NAME
+        )

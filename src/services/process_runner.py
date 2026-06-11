@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
 from src.config.process_definitions import ProcessDefinition
 from src.connectors.hana_connector import HanaConnector
 from src.connectors.postgres_connector import PostgresConnector
+from src.domain.enums import StatusProcesso
 from src.utils.logger import setup_logger
 from src.utils.paths import get_log_dir
 
@@ -20,9 +22,11 @@ class ProcessRunner:
         self,
         postgres: PostgresConnector,
         hana: HanaConnector,
+        logger: Optional[logging.Logger] = None,
     ):
         self.postgres = postgres
         self.hana = hana
+        self.logger = logger
 
     def _read_sql_file(self, path: Path) -> str:
         if not path.exists():
@@ -35,7 +39,7 @@ class ProcessRunner:
             return f.read()
 
     def run(self, process: ProcessDefinition) -> pd.DataFrame:
-        logger = setup_logger(process.process_name, get_log_dir())
+        logger = self.logger or setup_logger(process.process_name, get_log_dir())
 
         logger.info(SEPARADOR)
         logger.info("🚀 Iniciando processo: %s", process.process_name)
@@ -95,7 +99,7 @@ class ProcessRunner:
                             **h,
                             "process_name": process.process_name,
                             "data_execucao": datetime.now(),
-                            "status_execucao": "SUCESSO",
+                            "status_execucao": StatusProcesso.SUCESSO.value,
                             "tempo_execucao": duracao,
                         }
                         resultado_final.append(merged)
@@ -110,7 +114,7 @@ class ProcessRunner:
                         **row,
                         "process_name": process.process_name,
                         "data_execucao": datetime.now(),
-                        "status_execucao": "SEM_RETORNO",
+                        "status_execucao": StatusProcesso.SEM_RETORNO.value,
                         "tempo_execucao": duracao,
                     }
                     resultado_final.append(merged)
@@ -130,7 +134,7 @@ class ProcessRunner:
                     **row,
                     "process_name": process.process_name,
                     "data_execucao": datetime.now(),
-                    "status_execucao": "ERRO",
+                    "status_execucao": StatusProcesso.ERRO.value,
                     "mensagem_erro": str(e),
                 }
                 resultado_final.append(merged)

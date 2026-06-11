@@ -1,60 +1,26 @@
+# -*- coding: utf-8 -*-
+"""Shim de compatibilidade.
+
+A definição dos processos migrou para `config/processes.yaml` (carregado por
+`process_loader`) e `ProcessDefinition` migrou para `src.domain.models`. Este
+módulo re-exporta os mesmos símbolos públicos para não quebrar imports
+existentes (`from src.config.process_definitions import ...`).
+"""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
 from typing import List
 
+from src.config.process_loader import load_processos
+from src.domain.models import ProcessDefinition
 
-@dataclass(frozen=True)
-class ProcessDefinition:
-    process_name: str
-    postgres_sql: Path
-    hana_sql: Path
-    parametros: List[str]
-    tabela_destino: str
-    ativo: bool = True
-    truncate_before_insert: bool = False
-    drop_and_create: bool = False
-
-
-BASE_DIR = Path(__file__).resolve().parents[2]
-
-SQL_POSTGRES_DIR = BASE_DIR / "sql" / "postgres" / "consultas"
-SQL_SAP_HANA_DIR = BASE_DIR / "sql" / "sap_hana" / "consultas"
-
-
-PROCESSOS: List[ProcessDefinition] = [
-    ProcessDefinition(
-        process_name="V2_Consulta_Comp_CTRFIXO",
-        postgres_sql=SQL_POSTGRES_DIR / "Consulta_Comp_CTRFIXO.sql",
-        hana_sql=SQL_SAP_HANA_DIR / "Consulta_Comp_CTRFIXO.sql",
-        parametros=["doc_compra", "numero_cockpit"],
-        tabela_destino="tb_resultado_final_hana",
-        ativo=True,
-        truncate_before_insert=False,
-        drop_and_create=False,
-    ),
-    ProcessDefinition(
-        process_name="V2_Consulta_Comp_CTR_S_FIXACAO",
-        postgres_sql=SQL_POSTGRES_DIR / "Consulta_Comp_CTR_S_FIXACAO.sql",
-        hana_sql=SQL_SAP_HANA_DIR / "Consulta_Comp_CTR_S_FIXACAO.sql",
-        parametros=["doc_compra", "numero_cockpit"],
-        tabela_destino="tb_resultado_final_hana",
-        ativo=True,
-        truncate_before_insert=False,
-        drop_and_create=False,
-    ),
-    ProcessDefinition(
-        process_name="V2_Consulta_Comp_ARMAZEN",
-        postgres_sql=SQL_POSTGRES_DIR / "Consulta_Comp_ARMAZEN.sql",
-        hana_sql=SQL_SAP_HANA_DIR / "Consulta_Comp_ARMAZEN.sql",
-        parametros=["n_contrato", "numero_cockpit"],
-        tabela_destino="tb_resultado_final_hana",
-        ativo=True,
-        truncate_before_insert=False,
-        drop_and_create=False,
-    ),
+__all__ = [
+    "ProcessDefinition",
+    "PROCESSOS",
+    "get_processos_ativos",
+    "get_processo_por_nome",
 ]
+
+PROCESSOS: List[ProcessDefinition] = load_processos()
 
 
 def get_processos_ativos() -> List[ProcessDefinition]:

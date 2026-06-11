@@ -1,0 +1,84 @@
+[
+  [
+    "drop_table_if_exists",
+    "dev",
+    "tb_resultado_final_hana"
+  ],
+  [
+    "table_exists",
+    "dev",
+    "tb_resultado_final_hana",
+    false
+  ],
+  [
+    "create_table",
+    "dev",
+    "tb_resultado_final_hana",
+    {
+      "process_name": "TEXT",
+      "doc_compra": "TEXT",
+      "n_contrato": "TEXT",
+      "numero_cockpit": "TEXT",
+      "docnum": "TEXT",
+      "status_execucao": "TEXT",
+      "valor": "NUMERIC(18,6)"
+    }
+  ],
+  [
+    "get_table_columns",
+    "dev",
+    "tb_resultado_final_hana",
+    [
+      "process_name",
+      "doc_compra",
+      "n_contrato",
+      "numero_cockpit",
+      "docnum",
+      "status_execucao",
+      "valor"
+    ]
+  ],
+  [
+    "ensure_unique_index",
+    "dev",
+    "tb_resultado_final_hana",
+    "ix_uq_tb_resultado_final_hana"
+  ],
+  [
+    "upsert_dataframe",
+    "dev",
+    "tb_resultado_final_hana",
+    {
+      "columns": [
+        "process_name",
+        "doc_compra",
+        "n_contrato",
+        "numero_cockpit",
+        "docnum",
+        "status_execucao",
+        "valor"
+      ],
+      "records": [
+        {
+          "process_name": "V2_X",
+          "doc_compra": "4500451189",
+          "n_contrato": "",
+          "numero_cockpit": "123490",
+          "docnum": "3038001",
+          "status_execucao": "SUCESSO",
+          "valor": 19205.0
+        },
+        {
+          "process_name": "V2_X",
+          "doc_compra": "4500725349",
+          "n_contrato": "",
+          "numero_cockpit": "122253",
+          "docnum": null,
+          "status_execucao": "SEM_RETORNO",
+          "valor": null
+        }
+      ]
+    },
+    "(process_name, COALESCE(doc_compra,''), COALESCE(n_contrato,''), COALESCE(numero_cockpit,''), COALESCE(docnum,''), status_execucao)"
+  ]
+]

@@ -11,7 +11,7 @@ WITH zmmt_base AS (
     FROM ZMMT0022 zmmt
     WHERE 1 = 1
       AND zmmt.CONTRATO = ?
-      AND TO_NUMBER(zmmt.ID) = ?
+      AND LTRIM(zmmt.ID, '0') = LTRIM(?, '0')
 ),
 
 ctr AS (
@@ -167,4 +167,4 @@ INNER JOIN vtin2
         OR ROUND(COALESCE(zmmt_base.VALOR, 0), 2) = ROUND(COALESCE(vtin2.A_VTIN_VLR_NF, 0), 2)
    )
 WHERE 1 = 1
-  AND YEAR(vtin2.VTIN_DT_CRIACAO) = 2026;
+  AND YEAR(vtin2.VTIN_DT_CRIACAO) = {ano};

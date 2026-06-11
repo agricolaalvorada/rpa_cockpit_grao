@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+import warnings
+from datetime import date
 from pathlib import Path
 from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+# O campo `schema` (atributo de negócio) sombreia um atributo herdado do
+# BaseModel do Pydantic. O acesso `config.schema` funciona normalmente; apenas
+# silenciamos o aviso cosmético para não poluir a saída do monitor.
+warnings.filterwarnings("ignore", message=r'Field name "schema"', category=UserWarning)
 
 try:
     from dotenv import load_dotenv
@@ -60,10 +68,11 @@ def _get_env_bool(key: str, default: bool = False) -> bool:
 
 
 # =========================================================
-# CONFIGURAÇÕES
+# CONFIGURAÇÕES (Pydantic, imutáveis)
 # =========================================================
-@dataclass(frozen=True)
-class SapConfig:
+class SapConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     host: str
     port: int
     database: str
@@ -72,6 +81,8 @@ class SapConfig:
     password: str
     connection_delay: float = 1.0
     query_delay: float = 0.5
+    # Ano da safra usado no filtro das consultas HANA (substitui o YEAR=2026 hardcoded).
+    safra_ano: int = Field(default_factory=lambda: date.today().year)
 
     @classmethod
     def from_env(cls) -> "SapConfig":
@@ -84,6 +95,7 @@ class SapConfig:
             password=_get_env("SAP_PASSWORD", "") or "",
             connection_delay=_get_env_float("SAP_CONNECTION_DELAY", 1.0) or 1.0,
             query_delay=_get_env_float("SAP_QUERY_DELAY", 0.5) or 0.5,
+            safra_ano=_get_env_int("SAFRA_ANO", date.today().year) or date.today().year,
         )
 
     def validate(self) -> None:
@@ -108,8 +120,9 @@ class SapConfig:
             )
 
 
-@dataclass(frozen=True)
-class PostgresConfig:
+class PostgresConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     host: str
     port: int
     database: str
@@ -150,8 +163,9 @@ class PostgresConfig:
             )
 
 
-@dataclass(frozen=True)
-class LogConfig:
+class LogConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     level: str
     dir: Path
     save_file: bool

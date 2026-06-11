@@ -163,7 +163,7 @@ class HanaConnector:
             time.sleep(self.config.query_delay)
 
     def qualify_sql_with_schema(self, sql: str) -> str:
-        return sql.format(schema=self.config.schema)
+        return sql.format(schema=self.config.schema, ano=self.config.safra_ano)
 
     def close(self) -> None:
         if self.connection is not None:
