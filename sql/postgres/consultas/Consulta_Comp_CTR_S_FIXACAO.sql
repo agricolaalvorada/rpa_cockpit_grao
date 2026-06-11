@@ -11,14 +11,14 @@ SELECT
     cqsff.material,
     cqsff.cod_parceiro,
     cqsff.data_hora_ultima_atualizacao,
-    TRIM(split_cockpit) AS numero_cockpit,
+    split_cockpit.numero_cockpit,
     cqsff.msg_rpa
 FROM prod.complemento_quantidade_sem_fixacao_fila cqsff
-CROSS JOIN LATERAL regexp_split_to_table(
-    COALESCE(cqsff.numero_cockpit, ''),
-    '\|'
+CROSS JOIN LATERAL (
+    SELECT DISTINCT TRIM(s) AS numero_cockpit
+    FROM regexp_split_to_table(COALESCE(cqsff.numero_cockpit, ''), '\|') AS s
+    WHERE TRIM(s) <> ''
 ) AS split_cockpit
 WHERE 1 = 1
   AND cqsff.status IN ('12', '13', '9')
-  AND TRIM(split_cockpit) <> ''
 ORDER BY cqsff.id;

@@ -161,10 +161,11 @@ INNER JOIN ctr
     ON ctr.EBELN = zmmt_base.CONTRATO
 INNER JOIN vtin2
     ON LTRIM(ctr.CPF_CNPJ, '0') = LTRIM(vtin2.VTIN_CPF_CNPJ, '0')
-   AND ROUND(COALESCE(zmmt_base.QTDE, 0), 3) = ROUND(COALESCE(vtin2.VTIN_QTDE, 0), 3)
+   AND zmmt_base.QTDE IS NOT NULL
+   AND ROUND(zmmt_base.QTDE, 3) = ROUND(vtin2.VTIN_QTDE, 3)
    AND (
-        ROUND(COALESCE(zmmt_base.VALOR, 0), 2) = ROUND(COALESCE(vtin2.VTIN_VLR_NF, 0), 2)
-        OR ROUND(COALESCE(zmmt_base.VALOR, 0), 2) = ROUND(COALESCE(vtin2.A_VTIN_VLR_NF, 0), 2)
+        ROUND(zmmt_base.VALOR, 2) = ROUND(vtin2.VTIN_VLR_NF, 2)
+        OR ROUND(zmmt_base.VALOR, 2) = ROUND(vtin2.A_VTIN_VLR_NF, 2)
    )
 WHERE 1 = 1
   AND YEAR(vtin2.VTIN_DT_CRIACAO) = {ano};
