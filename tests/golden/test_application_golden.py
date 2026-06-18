@@ -58,7 +58,7 @@ def _processo(tmp_path):
         process_name="V2_Consulta_Comp_CTRFIXO",
         postgres_sql=pg, hana_sql=hn,
         parametros=["doc_compra", "numero_cockpit"],
-        tabela_destino="tb_resultado_final_hana",
+        tabela_destino="complemento_notas_escrituracao",
     )
 
 

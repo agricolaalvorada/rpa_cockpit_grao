@@ -2,13 +2,13 @@
   [
     "table_exists",
     "dev",
-    "tb_resultado_final_hana",
+    "complemento_notas_escrituracao",
     true
   ],
   [
     "get_table_columns",
     "dev",
-    "tb_resultado_final_hana",
+    "complemento_notas_escrituracao",
     [
       "process_name",
       "doc_compra",
@@ -22,24 +22,24 @@
   [
     "table_exists",
     "dev",
-    "tb_resultado_final_hana",
+    "complemento_notas_escrituracao",
     true
   ],
   [
     "truncate_table",
     "dev",
-    "tb_resultado_final_hana"
+    "complemento_notas_escrituracao"
   ],
   [
     "ensure_unique_index",
     "dev",
-    "tb_resultado_final_hana",
-    "ix_uq_tb_resultado_final_hana"
+    "complemento_notas_escrituracao",
+    "ix_uq_complemento_notas_escrituracao"
   ],
   [
     "upsert_dataframe",
     "dev",
-    "tb_resultado_final_hana",
+    "complemento_notas_escrituracao",
     {
       "columns": [
         "process_name",

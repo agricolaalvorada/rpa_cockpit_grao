@@ -20,7 +20,7 @@
   [
     "salvar",
     "dev",
-    "tb_resultado_final_hana",
+    "complemento_notas_escrituracao",
     [
       "doc_compra",
       "DOCNUM",
@@ -33,7 +33,7 @@
   [
     "salvar",
     "prod",
-    "tb_resultado_final_hana",
+    "complemento_notas_escrituracao",
     [
       "doc_compra",
       "DOCNUM",

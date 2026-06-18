@@ -8,7 +8,7 @@ from src.services.resultado_service import ResultadoService
 from tests.fakes import FakePostgresConnector
 from tests.golden_utils import assert_golden
 
-TABELA = "tb_resultado_final_hana"
+TABELA = "complemento_notas_escrituracao"
 # colunas da chave única já presentes (cenário realista de resultado consolidado)
 COLS_BASE = ["process_name", "doc_compra", "n_contrato", "numero_cockpit", "docnum",
              "status_execucao", "valor"]

@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+from hdbcli import dbapi
+
 from src.config.process_definitions import ProcessDefinition
 from src.connectors.hana_connector import HanaConnector
 from src.connectors.postgres_connector import PostgresConnector
@@ -125,11 +127,11 @@ class ProcessRunner:
                     )
 
                 logger.info(SEPARADOR)
-                self.hana.wait_between_queries()
+                if idx < len(rows):
+                    self.hana.wait_between_queries()
 
-            except Exception as e:
-                logger.error("❌ Erro ao executar SAP: %s", e)
-
+            except dbapi.ProgrammingError as e:
+                logger.error("❌ Erro de query SAP (SQL inválido) | item=%s: %s", idx, e)
                 merged = {
                     **row,
                     "process_name": process.process_name,
@@ -138,7 +140,22 @@ class ProcessRunner:
                     "mensagem_erro": str(e),
                 }
                 resultado_final.append(merged)
+                logger.info(SEPARADOR)
 
+            except dbapi.Error as e:
+                logger.error("❌ Erro de conexão SAP — abortando processo: %s", e)
+                raise
+
+            except Exception as e:
+                logger.error("❌ Erro inesperado | item=%s: %s", idx, e)
+                merged = {
+                    **row,
+                    "process_name": process.process_name,
+                    "data_execucao": datetime.now(),
+                    "status_execucao": StatusProcesso.ERRO.value,
+                    "mensagem_erro": str(e),
+                }
+                resultado_final.append(merged)
                 logger.info(SEPARADOR)
 
         df = pd.DataFrame(resultado_final)

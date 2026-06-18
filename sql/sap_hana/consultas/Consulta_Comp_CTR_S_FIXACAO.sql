@@ -12,6 +12,7 @@ WITH zmmt_base AS (
     WHERE 1 = 1
       AND zmmt.CONTRATO = ?
       AND LTRIM(zmmt.ID, '0') = LTRIM(?, '0')
+      AND zmmt.MIRO_DATA != '00000000'
 ),
 
 ctr AS (
@@ -36,6 +37,7 @@ ctr AS (
         FROM EKPO
     ) po
         ON ko.EBELN = po.EBELN
+       AND po.MANDT = ko.MANDT
     INNER JOIN (
         SELECT
             MATNR,
@@ -44,6 +46,7 @@ ctr AS (
         WHERE SPART = '01'
     ) ma
         ON po.MATNR = ma.MATNR
+    WHERE ko.EBELN = ?
 ),
 
 vtin2 AS (
@@ -93,10 +96,8 @@ vtin2 AS (
         ON doc.DOCNUM = act.DOCNUM
     INNER JOIN "/VTIN/NFEIT" item
         ON vxr.ID = item.NFEID
-    WHERE (
-        vxr.MANSTA NOT IN ('03', '04')
-        OR vxr.CODESTA IN ('101')
-    )
+    WHERE vxr.CODESTA IN ('101')
+      AND vxr.MANSTA NOT IN ('03', '04')
 )
 
 SELECT

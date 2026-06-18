@@ -51,5 +51,5 @@ def ctrfixo_process(tmp_path):
         postgres_sql=pg_sql,
         hana_sql=hana_sql,
         parametros=["doc_compra", "numero_cockpit"],
-        tabela_destino="tb_resultado_final_hana",
+        tabela_destino="complemento_notas_escrituracao",
     )

@@ -2,18 +2,18 @@
   [
     "drop_table_if_exists",
     "dev",
-    "tb_resultado_final_hana"
+    "complemento_notas_escrituracao"
   ],
   [
     "table_exists",
     "dev",
-    "tb_resultado_final_hana",
+    "complemento_notas_escrituracao",
     false
   ],
   [
     "create_table",
     "dev",
-    "tb_resultado_final_hana",
+    "complemento_notas_escrituracao",
     {
       "process_name": "TEXT",
       "doc_compra": "TEXT",
@@ -27,13 +27,13 @@
   [
     "ensure_unique_index",
     "dev",
-    "tb_resultado_final_hana",
-    "ix_uq_tb_resultado_final_hana"
+    "complemento_notas_escrituracao",
+    "ix_uq_complemento_notas_escrituracao"
   ],
   [
     "upsert_dataframe",
     "dev",
-    "tb_resultado_final_hana",
+    "complemento_notas_escrituracao",
     {
       "columns": [
         "process_name",

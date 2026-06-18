@@ -221,31 +221,44 @@ class Application:
                     df_prepared = resultado_service.preparar_dataframe_para_banco(df)
                     log_colunas_formatado(logger, df_prepared)
 
-                    for schema_idx, target_schema in enumerate(target_schemas, start=1):
-                        logger.info(SEPARADOR)
-                        logger.info(
-                            "🗄️ Iniciando carga PostgreSQL [%s/%s] | schema=%s | tabela=%s",
-                            schema_idx,
-                            len(target_schemas),
-                            target_schema,
-                            processo.tabela_destino,
-                        )
+                    df_aptas = (
+                        df[df["status_execucao"] == StatusProcesso.SUCESSO.value]
+                        if "status_execucao" in df.columns
+                        else df
+                    )
 
-                        resultado_service.salvar_no_postgres(
-                            df=df,
-                            table_name=processo.tabela_destino,
-                            schema=target_schema,
-                            truncate_before_insert=processo.truncate_before_insert,
-                            drop_and_create=processo.drop_and_create,
-                        )
-
+                    if df_aptas.empty:
                         logger.info(
-                            "✅ Dados salvos no PostgreSQL | schema=%s | tabela=%s | linhas=%s",
-                            target_schema,
-                            processo.tabela_destino,
-                            len(df_prepared),
+                            "ℹ️ Nenhuma nota apta para escrituração — banco não atualizado | processo=%s",
+                            processo.process_name,
                         )
-                        logger.info(SEPARADOR)
+                    else:
+                        for schema_idx, target_schema in enumerate(target_schemas, start=1):
+                            logger.info(SEPARADOR)
+                            logger.info(
+                                "🗄️ Iniciando carga PostgreSQL [%s/%s] | schema=%s | tabela=%s | aptas=%s",
+                                schema_idx,
+                                len(target_schemas),
+                                target_schema,
+                                processo.tabela_destino,
+                                len(df_aptas),
+                            )
+
+                            resultado_service.salvar_no_postgres(
+                                df=df_aptas,
+                                table_name=processo.tabela_destino,
+                                schema=target_schema,
+                                truncate_before_insert=processo.truncate_before_insert,
+                                drop_and_create=processo.drop_and_create,
+                            )
+
+                            logger.info(
+                                "✅ Dados salvos no PostgreSQL | schema=%s | tabela=%s | linhas=%s",
+                                target_schema,
+                                processo.tabela_destino,
+                                len(df_aptas),
+                            )
+                            logger.info(SEPARADOR)
 
                     status_col = (
                         df["status_execucao"] if "status_execucao" in df.columns else None

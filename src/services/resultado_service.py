@@ -13,7 +13,7 @@ from src.connectors.postgres_connector import PostgresConnector
 UPSERT_KEY_COLS = [
     "process_name", "doc_compra", "n_contrato", "numero_cockpit", "docnum", "status_execucao",
 ]
-UPSERT_INDEX_NAME = "ix_uq_tb_resultado_final_hana"
+UPSERT_INDEX_NAME = "ix_uq_complemento_notas_escrituracao"
 _UPSERT_KEY_SQL = (
     "process_name, COALESCE(doc_compra,''), COALESCE(n_contrato,''), "
     "COALESCE(numero_cockpit,''), COALESCE(docnum,''), status_execucao"

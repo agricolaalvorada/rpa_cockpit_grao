@@ -6,10 +6,10 @@ from src.config.process_definitions import PROCESSOS, get_processos_ativos
 from src.config.process_loader import load_processos
 
 ESPERADO = [
-    ("V2_Consulta_Comp_CTRFIXO", ["doc_compra", "numero_cockpit"]),
-    ("V2_Consulta_Comp_CTR_S_FIXACAO", ["doc_compra", "numero_cockpit"]),
-    ("V2_Consulta_Comp_CTR_C_FIXACAO", ["doc_compra", "numero_cockpit"]),
-    ("V2_Consulta_Comp_ARMAZEN", ["n_contrato", "numero_cockpit"]),
+    ("V2_Consulta_Comp_CTRFIXO", ["doc_compra", "numero_cockpit", "doc_compra"]),
+    ("V2_Consulta_Comp_CTR_S_FIXACAO", ["doc_compra", "numero_cockpit", "doc_compra"]),
+    ("V2_Consulta_Comp_CTR_C_FIXACAO", ["doc_compra", "numero_cockpit", "doc_compra"]),
+    ("V2_Consulta_Comp_ARMAZEN", ["n_contrato", "numero_cockpit", "n_contrato"]),
 ]
 
 
@@ -20,7 +20,7 @@ def test_ordem_nomes_e_parametros():
 
 def test_flags_e_tabela_destino():
     for p in load_processos():
-        assert p.tabela_destino == "tb_resultado_final_hana"
+        assert p.tabela_destino == "complemento_notas_escrituracao"
         assert p.ativo is True
         assert p.truncate_before_insert is False
         assert p.drop_and_create is False

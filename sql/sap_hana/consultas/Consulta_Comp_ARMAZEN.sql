@@ -12,6 +12,7 @@ WITH zmmt_base AS (
     WHERE 1 = 1
       AND zmmt.CONTRATO = LPAD(?, 10, '0')
       AND LTRIM(zmmt.ID, '0') = LTRIM(?, '0')
+      AND zmmt.MIRO_DATA != '00000000'
 ),
 
 ctr AS (
@@ -40,6 +41,7 @@ ctr AS (
     LEFT JOIN KNA1 kna1
         ON kna1.MANDT = vbak.MANDT
        AND kna1.KUNNR = vbak.KUNNR
+    WHERE LPAD(vbak.VBELN, 10, '0') = LPAD(?, 10, '0')
 ),
 
 vtin2 AS (
@@ -89,10 +91,8 @@ vtin2 AS (
         ON doc.DOCNUM = act.DOCNUM
     INNER JOIN "/VTIN/NFEIT" item
         ON item.NFEID = vxr.ID
-    WHERE (
-        vxr.MANSTA NOT IN ('03', '04')
-        OR vxr.CODESTA IN ('101')
-    )
+    WHERE vxr.CODESTA IN ('101')
+      AND vxr.MANSTA NOT IN ('03', '04')
 )
 
 SELECT
