@@ -217,8 +217,26 @@ ON tb_resultado_final_hana (
 | Schema | `SAPABAP1` |
 | Usuário | `POWERBI` |
 
-Tabelas consultadas: `ZMMT0022`, `EKKO`, `EKPO`, `MARA`, `ZVS_BP_ID_FISCAL`,
-`/VTIN/_XML_REC`, `J_1BNFE_ACTIVE`, `J_1BNFDOC`, `/VTIN/NFEIT`, `VBAK`, `VBAP`, `KNA1`.
+**Tabelas consultadas:**
+
+| Tabela | Módulo SAP | Papel no processo |
+|---|---|---|
+| `ZMMT0022` | Z (customizado) | Fila interna: pedido/contrato, cockpit, QTDE, VALOR, MIRO_DATA |
+| `EKKO` | MM – Compras | Cabeçalho do pedido de compra (EBELN, LIFNR) |
+| `EKPO` | MM – Compras | Itens do pedido de compra (MATNR) |
+| `MARA` | MM – Material | Dados do material — filtro `SPART='01'` (grãos) |
+| `ZVS_BP_ID_FISCAL` | Z (customizado) | CPF/CNPJ do fornecedor vinculado ao LIFNR |
+| `VBAK` | SD – Vendas | Cabeçalho do contrato de venda (armazenagem) |
+| `VBAP` | SD – Vendas | Itens do contrato de venda (armazenagem) |
+| `KNA1` | SD – Clientes | Dados do cliente — CPF/CNPJ para armazenagem |
+| `/VTIN/_XML_REC` | VTIN (NF-e) | XML da NF-e recebida: CPF, CODESTA, MANSTA, valor, quantidade |
+| `/VTIN/NFEIT` | VTIN (NF-e) | Itens da NF-e — quantidade por item (`QCOM`) |
+| `J_1BNFE_ACTIVE` | FI-LOC (Brasil) | NF-e ativa no SAP — fornece o `DOCNUM` |
+| `J_1BNFDOC` | FI-LOC (Brasil) | Documento NF-e — cabeçalho fiscal (peso, valor total) |
+
+> **Compra** (CTRFIXO, CTR_S_FIXACAO, CTR_C_FIXACAO): `ZMMT0022 → EKKO / EKPO / MARA / ZVS_BP_ID_FISCAL → /VTIN/_XML_REC / /VTIN/NFEIT / J_1BNFE_ACTIVE / J_1BNFDOC`
+>
+> **Armazenagem** (ARMAZEN): substitui o bloco de compra por `VBAK / VBAP / KNA1`
 
 ---
 
