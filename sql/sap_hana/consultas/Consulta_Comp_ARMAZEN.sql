@@ -91,7 +91,7 @@ vtin2 AS (
         ON doc.DOCNUM = act.DOCNUM
     INNER JOIN "/VTIN/NFEIT" item
         ON item.NFEID = vxr.ID
-    WHERE vxr.CODESTA IN ('101')
+    WHERE vxr.CODESTA IN ('100')
       AND vxr.MANSTA NOT IN ('03', '04')
 )
 
@@ -168,4 +168,4 @@ INNER JOIN vtin2
         OR ROUND(zmmt_base.VALOR, 2) = ROUND(vtin2.A_VTIN_VLR_NF, 2)
    )
 WHERE 1 = 1
-  AND YEAR(vtin2.VTIN_DT_CRIACAO) = {ano};
+  AND YEAR(vtin2.VTIN_DT_EMISSAO) = {ano};
