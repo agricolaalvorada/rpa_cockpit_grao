@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -47,15 +48,27 @@ def _status_color(status: str) -> str:
 def _build_kpi_columns(execution_summary: Dict[str, Any]) -> List[Dict[str, Any]]:
     summary = execution_summary.get("summary", {})
 
+    # KPIs de destaque no topo: aptas/pendentes em primeiro (o número que importa),
+    # com cor (verde/âmbar), seguidos do total e da contagem de processos.
     kpis = [
-        ("Ambiente", _safe_text(execution_summary.get("environment"))),
-        ("Duração", _safe_text(execution_summary.get("duration_formatted"))),
-        ("Linhas", _safe_text(summary.get("total_linhas_processadas"))),
-        ("Processos", _safe_text(summary.get("total_processos"))),
+        ("Aptas", _safe_text(summary.get("total_notas_aptas")), "Good"),
+        ("Pendentes", _safe_text(summary.get("total_notas_pendentes")), "Warning"),
+        ("Linhas", _safe_text(summary.get("total_linhas_processadas")), None),
+        ("Processos", _safe_text(summary.get("total_processos")), None),
     ]
 
     columns: List[Dict[str, Any]] = []
-    for title, value in kpis:
+    for title, value, color in kpis:
+        value_block: Dict[str, Any] = {
+            "type": "TextBlock",
+            "text": value,
+            "size": "Medium",
+            "weight": "Bolder",
+            "wrap": True,
+        }
+        if color:
+            value_block["color"] = color
+
         columns.append(
             {
                 "type": "Column",
@@ -67,11 +80,7 @@ def _build_kpi_columns(execution_summary: Dict[str, Any]) -> List[Dict[str, Any]
                         "weight": "Bolder",
                         "size": "Small",
                     },
-                    {
-                        "type": "TextBlock",
-                        "text": value,
-                        "wrap": True,
-                    },
+                    value_block,
                 ],
             }
         )
@@ -83,10 +92,10 @@ def _build_fact_set(execution_summary: Dict[str, Any]) -> List[Dict[str, str]]:
     summary = execution_summary.get("summary", {})
 
     return [
+        {"title": "Ambiente", "value": _safe_text(execution_summary.get("environment"))},
+        {"title": "Duração", "value": _safe_text(execution_summary.get("duration_formatted"))},
         {"title": "Início", "value": _safe_text(execution_summary.get("started_at"))},
         {"title": "Fim", "value": _safe_text(execution_summary.get("finished_at"))},
-        {"title": "Notas aptas", "value": _safe_text(summary.get("total_notas_aptas"))},
-        {"title": "Pendentes", "value": _safe_text(summary.get("total_notas_pendentes"))},
         {"title": "Sucesso", "value": _safe_text(summary.get("processos_sucesso"))},
         {"title": "Sem dados", "value": _safe_text(summary.get("processos_sem_dados"))},
         {"title": "Erros", "value": _safe_text(summary.get("processos_erro"))},
@@ -328,6 +337,8 @@ def build_teams_adaptive_card(execution_summary: Dict[str, Any]) -> Dict[str, An
         "type": "AdaptiveCard",
         "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
         "version": "1.4",
+        # Alarga o card para a largura cheia da mensagem no Teams (padrão é estreito).
+        "msteams": {"width": "Full"},
         "body": body,
     }
 
@@ -369,7 +380,7 @@ def send_to_power_automate(
 
 
 def notify_teams_safe(
-    logger,
+    logger: logging.Logger,
     url: str,
     execution_summary: Dict[str, Any],
     timeout: int = 30,

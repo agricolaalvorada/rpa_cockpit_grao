@@ -20,20 +20,6 @@
     }
   ],
   [
-    "get_table_columns",
-    "dev",
-    "tb_resultado_final_hana",
-    [
-      "process_name",
-      "doc_compra",
-      "n_contrato",
-      "numero_cockpit",
-      "docnum",
-      "status_execucao",
-      "valor"
-    ]
-  ],
-  [
     "ensure_unique_index",
     "dev",
     "tb_resultado_final_hana",

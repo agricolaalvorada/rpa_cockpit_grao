@@ -92,7 +92,7 @@ class Application:
 
     def run(self) -> Dict[str, Any]:
         process_name = self.process_name
-        logger = self._logger or setup_logger(process_name, get_log_dir(), level=log_config.level)
+        logger = self._logger or setup_logger(process_name, get_log_dir(), level=log_config.level, save_file=log_config.save_file)
 
         started_at = self._now()
 
@@ -167,6 +167,14 @@ class Application:
                 return payload
 
             logger.info("📦 Total de processos ativos: %s", len(processos))
+
+            tabelas_destino = {p.tabela_destino for p in processos}
+            for schema in target_schemas:
+                for tabela in tabelas_destino:
+                    if postgres.table_exists(schema, tabela):
+                        logger.info("🗑️ Limpando tabela antes da execução | schema=%s | tabela=%s", schema, tabela)
+                        postgres.truncate_table(schema, tabela)
+
             logger.info(SEPARADOR)
 
             for idx, processo in enumerate(processos, start=1):

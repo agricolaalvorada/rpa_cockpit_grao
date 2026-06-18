@@ -6,6 +6,7 @@ SELECT
     cqsff.tipo,
     cqsff.n_contrato,
     cqsff.doc_compra,
+    cqsff.numero_cockpit AS numero_cockpit_original,
     cqsff.centro,
     cqsff.safra,
     cqsff.material,
@@ -20,5 +21,5 @@ CROSS JOIN LATERAL (
     WHERE TRIM(s) <> ''
 ) AS split_cockpit
 WHERE 1 = 1
-  AND cqsff.status IN ('12', '13', '9')
+  AND cqsff.status IN ('12', '13', '9') -- '9' = aguardando confirmação de fixação (específico deste processo)
 ORDER BY cqsff.id;

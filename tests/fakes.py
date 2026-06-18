@@ -26,7 +26,7 @@ class FakeHanaConnector:
         self.safra_ano = safra_ano
         self.queries: List[tuple] = []  # (sql, params_key)
 
-    def qualify_sql_with_schema(self, sql: str) -> str:
+    def render_sql_template(self, sql: str) -> str:
         return sql.format(schema=self.schema, ano=self.safra_ano)
 
     def execute_query(self, sql: str, params: Optional[Any] = None) -> List[Dict[str, Any]]:
@@ -44,9 +44,6 @@ class FakeHanaConnector:
         return {"current_user": "FAKE", "current_schema": self.schema}
 
     def connect(self):
-        return None
-
-    def get_connection(self):
         return None
 
     def close(self) -> None:

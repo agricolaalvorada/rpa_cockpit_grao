@@ -20,6 +20,15 @@ processos:
     truncate_before_insert: false
     drop_and_create: false
 
+  - process_name: V2_Consulta_Comp_CTR_C_FIXACAO
+    postgres_sql: postgres/consultas/Consulta_Comp_CTR_C_FIXACAO.sql
+    hana_sql: sap_hana/consultas/Consulta_Comp_CTR_C_FIXACAO.sql
+    parametros: [doc_compra, numero_cockpit]
+    tabela_destino: tb_resultado_final_hana
+    ativo: true
+    truncate_before_insert: false
+    drop_and_create: false
+
   - process_name: V2_Consulta_Comp_ARMAZEN
     postgres_sql: postgres/consultas/Consulta_Comp_ARMAZEN.sql
     hana_sql: sap_hana/consultas/Consulta_Comp_ARMAZEN.sql

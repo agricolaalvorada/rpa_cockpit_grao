@@ -10,36 +10,40 @@ WITH zmmt_base AS (
         zmmt.MIRO_HORA
     FROM ZMMT0022 zmmt
     WHERE 1 = 1
-      AND zmmt.CONTRATO = LPAD(?, 10, '0')
+      AND zmmt.CONTRATO = ?
       AND LTRIM(zmmt.ID, '0') = LTRIM(?, '0')
 ),
 
 ctr AS (
     SELECT DISTINCT
-        vbak.MANDT,
-        vbak.VKORG       AS BUKRS,
-        vbak.VBELN       AS EBELN,
-        vbak.VBELN       AS KONNR,
-        vbak.KUNNR       AS LIFNR,
-        kna1.NAME1       AS NAME,
-        COALESCE(NULLIF(kna1.STCD1, ''), kna1.STCD2) AS CPF_CNPJ,
-        kna1.STCD2       AS IE,
-        kna1.NAME1       AS NAME1_TEXT,
-        vbak.AUART       AS TIPO_DOCUMENTO,
-        vbak.VTWEG       AS CANAL_DISTRIBUICAO,
-        vbak.SPART       AS DIVISAO,
-        vbap.POSNR       AS ITEM_CONTRATO,
-        vbap.MATNR       AS MATERIAL,
-        vbap.ARKTX       AS DESCRICAO_ITEM,
-        vbap.KWMENG      AS QTD_PREVISTA,
-        vbap.VRKME       AS UM
-    FROM VBAK vbak
-    INNER JOIN VBAP vbap
-        ON vbap.MANDT = vbak.MANDT
-       AND vbap.VBELN = vbak.VBELN
-    LEFT JOIN KNA1 kna1
-        ON kna1.MANDT = vbak.MANDT
-       AND kna1.KUNNR = vbak.KUNNR
+        ko.MANDT,
+        ko.BUKRS,
+        ko.EBELN,
+        ko.KONNR,
+        ko.LIFNR,
+        bp.NAME,
+        bp.CPF_CNPJ,
+        bp.IE,
+        bp.NAME1_TEXT
+    FROM EKKO ko
+    INNER JOIN ZVS_BP_ID_FISCAL bp
+        ON ko.LIFNR = bp.PARTNER
+    INNER JOIN (
+        SELECT
+            MANDT,
+            EBELN,
+            MATNR
+        FROM EKPO
+    ) po
+        ON ko.EBELN = po.EBELN
+    INNER JOIN (
+        SELECT
+            MATNR,
+            SPART
+        FROM MARA
+        WHERE SPART = '01'
+    ) ma
+        ON po.MATNR = ma.MATNR
 ),
 
 vtin2 AS (
@@ -88,7 +92,7 @@ vtin2 AS (
     LEFT JOIN J_1BNFDOC doc
         ON doc.DOCNUM = act.DOCNUM
     INNER JOIN "/VTIN/NFEIT" item
-        ON item.NFEID = vxr.ID
+        ON vxr.ID = item.NFEID
     WHERE (
         vxr.MANSTA NOT IN ('03', '04')
         OR vxr.CODESTA IN ('101')
@@ -114,14 +118,6 @@ SELECT
     ctr.CPF_CNPJ,
     ctr.IE,
     ctr.NAME1_TEXT,
-    ctr.TIPO_DOCUMENTO,
-    ctr.CANAL_DISTRIBUICAO,
-    ctr.DIVISAO,
-    ctr.ITEM_CONTRATO,
-    ctr.MATERIAL       AS CTR_MATERIAL,
-    ctr.DESCRICAO_ITEM AS CTR_DESCRICAO_ITEM,
-    ctr.QTD_PREVISTA   AS CTR_QTD_PREVISTA,
-    ctr.UM             AS CTR_UM,
 
     vtin2.PARCEIRO,
     vtin2.LOCAL,
@@ -155,10 +151,9 @@ SELECT
     vtin2.A_VTIN_VLR_NF,
 
     GREATEST(COALESCE(vtin2.VTIN_VLR_NF, 0), COALESCE(vtin2.A_VTIN_VLR_NF, 0)) AS RESULTADO
-
 FROM zmmt_base
 INNER JOIN ctr
-    ON ctr.EBELN = LPAD(zmmt_base.CONTRATO, 10, '0')
+    ON ctr.EBELN = zmmt_base.CONTRATO
 INNER JOIN vtin2
     ON LTRIM(ctr.CPF_CNPJ, '0') = LTRIM(vtin2.VTIN_CPF_CNPJ, '0')
    AND zmmt_base.QTDE IS NOT NULL

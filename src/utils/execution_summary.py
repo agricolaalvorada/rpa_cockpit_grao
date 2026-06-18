@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -85,7 +86,10 @@ def build_execution_summary(
             }
         )
 
-    if processos_erro == 0:
+    if total_processos == 0 and processos_erro == 0:
+        status_final = StatusExecucaoGlobal.PARCIAL.value
+        message = "Nenhum processo ativo encontrado para executar."
+    elif processos_erro == 0:
         status_final = StatusExecucaoGlobal.SUCESSO.value
         message = "Execução finalizada com sucesso."
     elif processos_sucesso > 0 or processos_sem_dados > 0:
@@ -96,7 +100,7 @@ def build_execution_summary(
         message = "Execução finalizada com erro."
 
     return {
-        "success": processos_erro == 0,
+        "success": processos_erro == 0 and total_processos > 0,
         "status": status_final,
         "message": message,
         "process_name": process_name,
@@ -120,7 +124,7 @@ def build_execution_summary(
     }
 
 
-def log_execution_summary(logger, execution_summary: Dict[str, Any]) -> None:
+def log_execution_summary(logger: logging.Logger, execution_summary: Dict[str, Any]) -> None:
     """
     Escreve no logger um resumo final elegante da execução.
     """

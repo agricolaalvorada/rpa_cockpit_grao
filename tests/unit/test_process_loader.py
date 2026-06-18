@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Garante que o YAML reproduz exatamente as 3 definições originais (migração 1:1)."""
+"""Garante que o YAML reproduz exatamente as 4 definições de processo."""
 from __future__ import annotations
 
 from src.config.process_definitions import PROCESSOS, get_processos_ativos
@@ -8,6 +8,7 @@ from src.config.process_loader import load_processos
 ESPERADO = [
     ("V2_Consulta_Comp_CTRFIXO", ["doc_compra", "numero_cockpit"]),
     ("V2_Consulta_Comp_CTR_S_FIXACAO", ["doc_compra", "numero_cockpit"]),
+    ("V2_Consulta_Comp_CTR_C_FIXACAO", ["doc_compra", "numero_cockpit"]),
     ("V2_Consulta_Comp_ARMAZEN", ["n_contrato", "numero_cockpit"]),
 ]
 
@@ -35,5 +36,5 @@ def test_paths_resolvem_para_arquivos_existentes():
 
 
 def test_shim_reexporta_api():
-    assert len(PROCESSOS) == 3
-    assert len(get_processos_ativos()) == 3
+    assert len(PROCESSOS) == 4
+    assert len(get_processos_ativos()) == 4

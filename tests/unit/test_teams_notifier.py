@@ -69,13 +69,25 @@ def test_adaptive_card_estrutura():
     card = tn.build_teams_adaptive_card(SUMMARY)
     assert card["type"] == "AdaptiveCard"
     assert card["version"] == "1.4"
+    assert card["msteams"]["width"] == "Full"  # card alargado no Teams
     assert isinstance(card["body"], list) and card["body"]
     dump = json.dumps(card, ensure_ascii=False)
     assert "SAP_ESCRITURAR_V2" in dump
     assert "P1" in dump and "P2" in dump
     assert "🧨 Erros encontrados" in dump  # bloco de erro presente
-    assert "Notas aptas" in dump          # novo fact
+    assert "Aptas" in dump and "Pendentes" in dump  # KPIs promovidos ao topo
+    assert '"color": "Good"' in dump      # aptas em verde
     assert "30 aptas" in dump             # subtitulo por processo
+
+
+def test_kpis_aptas_pendentes_no_topo():
+    cols = tn._build_kpi_columns(SUMMARY)
+    titulos = [c["items"][0]["text"] for c in cols]
+    assert titulos[:2] == ["Aptas", "Pendentes"]
+    # aptas = verde (Good), pendentes = âmbar (Warning)
+    assert cols[0]["items"][1].get("color") == "Good"
+    assert cols[1]["items"][1].get("color") == "Warning"
+    assert cols[0]["items"][1]["text"] == "30"
 
 
 def test_adaptive_card_sem_erros_omite_bloco():

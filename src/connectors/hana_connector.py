@@ -77,13 +77,8 @@ class HanaConnector:
         finally:
             cursor.close()
 
-    def get_connection(self) -> dbapi.Connection:
-        if self.connection is None:
-            return self.connect()
-        return self.connection
-
     def test_connection(self) -> dict[str, Any]:
-        conn = self.get_connection()
+        conn = self.connect()
         cursor = conn.cursor()
 
         try:
@@ -126,7 +121,7 @@ class HanaConnector:
         sql: str,
         params: Optional[Iterable[Any]] = None,
     ) -> list[dict[str, Any]]:
-        conn = self.get_connection()
+        conn = self.connect()
         cursor = conn.cursor()
 
         try:
@@ -162,8 +157,12 @@ class HanaConnector:
         if self.config.query_delay > 0:
             time.sleep(self.config.query_delay)
 
-    def qualify_sql_with_schema(self, sql: str) -> str:
-        return sql.format(schema=self.config.schema, ano=self.config.safra_ano)
+    def render_sql_template(self, sql: str) -> str:
+        return (
+            sql
+            .replace("{schema}", self.config.schema)
+            .replace("{ano}", str(self.config.safra_ano))
+        )
 
     def close(self) -> None:
         if self.connection is not None:

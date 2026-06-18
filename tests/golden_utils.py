@@ -9,6 +9,7 @@ igualdade é exigida — qualquer mudança de comportamento quebra o teste.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,11 @@ def assert_golden(name: str, actual: Any) -> None:
     normalized = _to_jsonable(actual)
 
     if not path.exists():
+        if os.getenv("CI"):
+            raise FileNotFoundError(
+                f"Snapshot ausente em CI: {path}. "
+                "Gere o baseline localmente e commite os snapshots."
+            )
         path.write_text(
             json.dumps(normalized, ensure_ascii=False, indent=2),
             encoding="utf-8",

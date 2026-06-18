@@ -2,7 +2,10 @@
 """Log formatado das colunas da carga (extraído do main.py, comportamento preservado)."""
 from __future__ import annotations
 
+import logging
 from typing import List
+
+import pandas as pd
 
 SEPARADOR = "-" * 80
 
@@ -11,7 +14,7 @@ def join_cols(cols: List[str]) -> str:
     return ", ".join(cols) if cols else "(nenhum)"
 
 
-def log_colunas_formatado(logger, df) -> None:
+def log_colunas_formatado(logger: logging.Logger, df: pd.DataFrame) -> None:
     cols = list(df.columns)
 
     principais = [

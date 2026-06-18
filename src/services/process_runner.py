@@ -74,7 +74,7 @@ class ProcessRunner:
         resultado_final: List[Dict[str, Any]] = []
 
         sql_hana = self._read_sql_file(process.hana_sql)
-        sql_hana = self.hana.qualify_sql_with_schema(sql_hana)
+        sql_hana = self.hana.render_sql_template(sql_hana)
 
         for idx, row in enumerate(rows, start=1):
             try:

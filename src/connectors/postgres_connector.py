@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import psycopg
 from psycopg import sql as pgsql
@@ -110,7 +110,7 @@ class PostgresConnector:
 
     def execute_non_query(
         self,
-        sql: Any,
+        sql: Union[str, pgsql.Composable],
         params: Optional[tuple] = None,
     ) -> None:
         self.connect()
@@ -126,7 +126,7 @@ class PostgresConnector:
             self.conn.rollback()
             raise
 
-    def execute_many(self, sql: Any, data: List[tuple]) -> None:
+    def execute_many(self, sql: Union[str, pgsql.Composable], data: List[tuple]) -> None:
         if not data:
             return
 
