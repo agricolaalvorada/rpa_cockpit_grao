@@ -24,7 +24,7 @@ def test_qualify_substitui_ano_nos_sql_reais():
         out = hana.render_sql_template(sql)
         assert "{ano}" not in out
         assert "{" not in out and "}" not in out  # nenhuma chave solta
-        assert f"YEAR(vtin2.VTIN_DT_EMISSAO) = {sap_config.safra_ano}" in out
+        assert f"YEAR(vtin_fallback.VTIN_DT_EMISSAO) = {sap_config.safra_ano}" in out
 
 
 def test_qualify_usa_ano_configurado():
