@@ -207,6 +207,69 @@ ON tb_resultado_final_hana (
 
 > ⚠️ Não usar código de versão anterior (append puro) após a migração — viola o índice único.
 
+### Dicionário dos campos das filas
+
+Campos presentes nas 4 tabelas de fila (`complemento_quantidade_*_fila`):
+
+**Identificação / controle**
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `id` | integer | PK da fila |
+| `status` | varchar | Ciclo de vida: `1`=novo · `9`=aguardando fixação (S_FIXACAO) · `12`/`13`=pendente monitor · `15`=concluído |
+| `status_complemento_fixo` | varchar | Descrição textual do status (`ESCRITURAÇÃO JÁ REALIZADA`, etc.) |
+| `msg_rpa` | varchar | Mensagem do RPA que processou o item |
+| `data_hora_inicio` | varchar | Quando o item entrou na fila |
+| `data_hora_ultima_atualizacao` | varchar | Data/hora da última modificação |
+
+**Contrato / pedido**
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `n_contrato` | varchar | Número do contrato (KONNR para compra / VBELN para armazém) — parâmetro 1 do HANA para ARMAZEN |
+| `doc_compra` | varchar | Pedido de compra (EBELN) — parâmetro 1 do HANA para processos CTR |
+| `tipo` | varchar | Tipo de lançamento (`A_FIXAR_C`, `SFIS`, `CFIS`, etc.) |
+| `tipo_contrato` / `desc_tipo_contrato` | varchar | Código e descrição do tipo de contrato SAP |
+| `tipo_pedido` | varchar | Tipo de pedido SAP (ex.: `ZPGD`) |
+| `safra` | varchar | Safra de referência (ex.: `2025/2026`) |
+| `material` | varchar | Código do material SAP |
+| `centro` | varchar | Centro SAP responsável |
+| `cod_parceiro` / `desc_parceiro` | varchar | Código e nome do fornecedor/cliente |
+| `moeda` | varchar | Moeda do contrato (ex.: `BRL`) |
+
+**Quantidades / valores**
+
+| Campo | Tipo | Tabelas | Descrição |
+|---|---|---|---|
+| `qtd_contratado` | varchar | todas | Quantidade total contratada |
+| `qtd_a_entreg_a_fix` | varchar | todas | Quantidade a entregar/fixar |
+| `qtde_liquidada` | varchar | todas | Quantidade liquidada |
+| `qtde_rom_entregue` | varchar | todas | Quantidade ROM entregue |
+| `qtde_nf` | varchar | DEPOSITO | Quantidade da NF (substituição de `qtde_liquidada`) |
+| `valor` | varchar | todas | Valor do cockpit |
+| `data_pagamento` | varchar | todas | Data prevista de pagamento |
+
+**Cockpit / NF-e**
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `numero_cockpit` | varchar | ID(s) do cockpit separados por `\|` — parâmetro 2 do HANA |
+| `numero_miro` | varchar | Número do documento MIRO (`ZMMT0022.MIRO_DOC`) — usado na validação via VIA_MIRO |
+| `chave_acesso` | varchar | Chave de acesso NF-e (44 dígitos) |
+| `num_nota_fiscal` | varchar | Número da NF |
+| `series` | varchar | Série da NF |
+| `num_aleatorio` | varchar | Número aleatório NF-e (DOCNUM9) |
+| `num_log` | varchar | Número de autorização SEFAZ |
+| `digito_verificador` | varchar | Dígito verificador NF-e |
+| `data_documento` | varchar | Data do documento NF |
+| `data_processamento` / `hora_processamento` | varchar | Data e hora de processamento da NF |
+
+**Exclusivo CTR_C_FIXACAO**
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `fixacao` | varchar | Número da fixação de preço vinculada ao cockpit |
+
 ### SAP HANA — fonte de verdade
 
 | Parâmetro | Valor |
