@@ -262,7 +262,7 @@ Campos presentes nas 4 tabelas de fila (`complemento_quantidade_*_fila`):
 | `num_log` | varchar | Número de autorização SEFAZ |
 | `digito_verificador` | varchar | Dígito verificador NF-e |
 | `data_documento` | varchar | Data do documento NF |
-| `data_processamento` / `hora_processamento` | varchar | Data e hora de processamento da NF |
+| `data_processamento` / `hora_processamento` | varchar | Data e hora de processamento da NF — preenchido apenas em CTR_FIXO e CTR_S_FIXACAO; sempre nulo em CTR_C_FIXACAO e DEPOSITO |
 
 **Exclusivo CTR_C_FIXACAO**
 
