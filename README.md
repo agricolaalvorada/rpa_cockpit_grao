@@ -7,7 +7,8 @@ consolida o resultado, grava via UPSERT nos schemas `dev` e `prod`
 (`tb_resultado_final_hana`), exporta um Excel e notifica o Teams via Power Automate.
 
 > **Status:** branch `refactor/escrituracao-v2` — Fase 1 (reestruturação em camadas) ✅
-> + Fase 2 (correções de negócio validadas em prod) ✅. 4 processos ativos. 78 testes.
+> + Fase 2 (correções de negócio validadas em prod) ✅
+> + Integração Automation Anywhere ✅. 4 processos ativos. 78 testes.
 > **PR ainda não aberto.**
 
 ---
@@ -44,6 +45,7 @@ eliminando conferência manual:
 | **Estratégia de gravação** | Truncate da tabela no início de cada ciclo + UPSERT com índice único por `(process_name, doc_compra, n_contrato, numero_cockpit, docnum, status_execucao)` |
 | **Export** | Excel em `data/output/{process_name}/` |
 | **Notificação** | Adaptive Card → Teams via `POWER_AUTOMATE_TEAMS_URL` (Power Automate) |
+| **Automação RPA** | Automation Anywhere A360 — agendamento do bot de escrituração (+3 min) após apta encontrada |
 | **Logs** | loguru — console + arquivo diário (`logs/`) |
 | **Testes** | 78 (golden de caracterização + unit); conectores fake, não tocam SAP/PG/Teams |
 
@@ -104,6 +106,7 @@ src/
   config/                    # SapConfig/PostgresConfig/LogConfig (Pydantic + from_env())
   │                          # + ProcessLoader (YAML) + process_definitions (shim de compat.)
   connectors/                # HanaConnector (retry automático) · PostgresConnector (DDL/DML/UPSERT)
+  │                          # + AutomationAnywhereConnector (auth/CB/retry · guard · schedule)
   services/                  # ProcessRunner (fila → HANA → DataFrame)
   │                          # + ResultadoService (normaliza · Excel · UPSERT Postgres)
   orchestration/             # Application (orquestra o ciclo) · column_log
@@ -120,6 +123,14 @@ tests/
 **Fluxo de um ciclo:**
 
 ```
+Windows Task Scheduler acorda o monitor
+              │
+              ▼
+  [GUARD AA] algum bot de escrituração rodando no Control Room?
+  ├─ SIM → aborta (sem truncar, sem consultar) — aguarda próxima execução
+  └─ NÃO → prossegue
+              │
+              ▼
 PostgreSQL (fila prod)
   └─► ProcessRunner.run(processo)
         ├─ executa SQL Postgres → DataFrame de itens (cockpit explodido)
@@ -131,8 +142,12 @@ PostgreSQL (fila prod)
               ┌───────────────┴───────────────┐
               ▼                               ▼
    ResultadoService.exportar_excel()   ResultadoService.salvar_no_postgres()
-   data/output/{processo}/              UPSERT em dev.tb_resultado_final_hana
-   {processo}_YYYYMMDD_HHMMSS.xlsx      UPSERT em prod.tb_resultado_final_hana
+   data/output/{processo}/              UPSERT em dev/prod.complemento_notas_escrituracao
+   {processo}_YYYYMMDD_HHMMSS.xlsx
+              │
+              ▼ (se há aptas — SUCESSO)
+   AutomationAnywhereConnector.schedule_bot()
+   → pick_runner([8635, 9307]) → POST /v2/schedule/automations (+3 min)
               │
               ▼
    build_execution_summary() → log + Teams (Adaptive Card)
@@ -330,6 +345,15 @@ POSTGRES_SCHEMA=public
 # --- Teams ---
 POWER_AUTOMATE_TEAMS_URL=  # webhook Power Automate; deixar vazio para desabilitar
 
+# --- Automation Anywhere ---
+AA_CONTROL_ROOM_URL=       # ex.: https://empresa.my.automationanywhere.digital
+AA_USERNAME=               # usuário da API do Control Room
+AA_PASSWORD=               # senha (ou AA_API_KEY para autenticação por chave)
+AA_AUTH_PATH=/v2/authentication  # /v1/authentication em alguns ambientes
+AA_VERIFY_SSL=true
+AA_TIMEOUT=60
+AA_RUN_AS_USER_IDS=        # IDs dos runners em ordem de preferência (ex.: 8635,9307)
+
 # --- Log ---
 LOG_LEVEL=INFO
 LOG_SAVE_FILE=true
@@ -344,7 +368,58 @@ Processos são configurados em [`config/processes.yaml`](config/processes.yaml)
 
 ---
 
-## 9. Como rodar
+## 9. Integração Automation Anywhere
+
+Quando o monitor encontra uma nota apta à escrituração (`SUCESSO`), ele aciona
+automaticamente o bot RPA correspondente no **Automation Anywhere Control Room A360**,
+agendando a execução para daqui **3 minutos** num runner livre.
+
+### 9.1 Lógica de guard (antes de truncar)
+
+Ao iniciar cada ciclo, o monitor verifica se algum bot de escrituração já está ativo
+no Control Room. Se sim, **aborta o ciclo inteiro** sem truncar nem consultar o SAP —
+preservando os dados da execução em andamento até a próxima janela do Task Scheduler.
+
+### 9.2 Mapeamento processo → bot
+
+| Processo | `aa_file_id` | Bot AA |
+|---|---|---|
+| `V2_Consulta_Comp_CTRFIXO` | `1211403` | `MainEscriturarNotaComplementoFixo` |
+| `V2_Consulta_Comp_CTR_S_FIXACAO` | `1266717` | `MainEscriturarNotaComplementoSemFixacao` |
+| `V2_Consulta_Comp_CTR_C_FIXACAO` | `1233302` | `MainEscriturarNotaComplementoComFixacao` |
+| `V2_Consulta_Comp_ARMAZEN` | `1310535` | `MainEscriturarNotaComplementoDeposito` |
+
+### 9.3 Seleção de runner
+
+| Prioridade | ID | Username | Papel |
+|---|---|---|---|
+| 1 (principal) | `8635` | `bot04_runner_aws` | Usado se livre |
+| 2 (fallback) | `9307` | `bot05_runner_ws` | Usado se candidato 1 ocupado |
+
+Se ambos estiverem ocupados, o agendamento é ignorado e registrado no log como warning.
+
+### 9.4 Agendamento (não disparo imediato)
+
+O bot **nunca é disparado imediatamente**. O monitor cria um agendamento one-time
+via `POST /v2/schedule/automations` para daqui 3 minutos, garantindo que a tabela
+`complemento_notas_escrituracao` já esteja populada quando o RPA for ler.
+
+```
+Monitor encontra aptas → salva no Postgres → schedule_bot(file_id, runner, +3min)
+```
+
+### 9.5 Componentes
+
+| Arquivo | Papel |
+|---|---|
+| `src/connectors/automation_anywhere_connector.py` | Cliente completo: auth, circuit breaker, retry, `is_bot_running`, `is_runner_busy`, `pick_runner`, `any_bot_running`, `schedule_bot` |
+| `src/connectors/automation_anywhere_metrics.py` | Status buckets (RUNNING / WAITING / FAILED / COMPLETED) |
+| `src/orchestration/application.py` | `_aa_guard_check()` (início do ciclo) + `_schedule_aa_safe()` (após save) |
+| `docs/automation_anywhere.md` | Documentação completa do módulo AA portado do CONTROLE_JOBS_AA |
+
+---
+
+## 10. Como rodar
 
 ```powershell
 & ".\.ESCR_SAPvenv\Scripts\python.exe" main.py
@@ -367,7 +442,7 @@ python -m venv .ESCR_SAPvenv
 
 ---
 
-## 10. O que o pipeline faz (passo a passo)
+## 11. O que o pipeline faz (passo a passo)
 
 1. **Valida conexões** com HANA e PostgreSQL (teste de query simples em cada).
 2. **Carrega processos ativos** de `config/processes.yaml`.
@@ -390,7 +465,7 @@ python -m venv .ESCR_SAPvenv
 
 ---
 
-## 11. Testes
+## 12. Testes
 
 ```powershell
 & ".\.ESCR_SAPvenv\Scripts\python.exe" -m pytest -q
@@ -408,7 +483,7 @@ comportamento observável completo.
 
 ---
 
-## 12. Logs
+## 13. Logs
 
 - **loguru** (`src/utils/logger.py`).
 - **Console:** `INFO`, colorido.
@@ -417,7 +492,7 @@ comportamento observável completo.
 
 ---
 
-## 13. Backlog
+## 14. Backlog
 
 ### Fase 2 — correções de negócio (branch `refactor/escrituracao-v2`)
 
@@ -445,7 +520,7 @@ Pendente:
 
 ---
 
-## 14. Pontos de atenção (gotchas)
+## 15. Pontos de atenção (gotchas)
 
 - **Status `15` na fila ≠ escriturado.** Em validação em massa (585 itens): apenas
   75% tinham `DOCNUM` preenchido. Critério real = `DOCNUM` no SAP.
@@ -464,7 +539,7 @@ Pendente:
 
 ---
 
-## 15. Solução de problemas
+## 16. Solução de problemas
 
 | Sintoma | Provável causa / ação |
 |---|---|
