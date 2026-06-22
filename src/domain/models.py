@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -27,6 +27,7 @@ class ProcessDefinition(BaseModel):
     ativo: bool = True
     truncate_before_insert: bool = False
     drop_and_create: bool = False
+    aa_file_id: Optional[int] = None
 
     @property
     def save_strategy(self) -> SaveStrategy:

@@ -12,6 +12,7 @@ processos:
     ativo: true
     truncate_before_insert: false
     drop_and_create: false
+    aa_file_id: 1211403
 
   - process_name: V2_Consulta_Comp_CTR_S_FIXACAO
     postgres_sql: postgres/consultas/Consulta_Comp_CTR_S_FIXACAO.sql
@@ -21,6 +22,7 @@ processos:
     ativo: true
     truncate_before_insert: false
     drop_and_create: false
+    aa_file_id: 1266717
 
   - process_name: V2_Consulta_Comp_CTR_C_FIXACAO
     postgres_sql: postgres/consultas/Consulta_Comp_CTR_C_FIXACAO.sql
@@ -30,6 +32,7 @@ processos:
     ativo: true
     truncate_before_insert: false
     drop_and_create: false
+    aa_file_id: 1233302
 
   - process_name: V2_Consulta_Comp_ARMAZEN
     postgres_sql: postgres/consultas/Consulta_Comp_ARMAZEN.sql
@@ -39,3 +42,4 @@ processos:
     ativo: true
     truncate_before_insert: false
     drop_and_create: false
+    aa_file_id: 1310535

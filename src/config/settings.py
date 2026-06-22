@@ -163,6 +163,55 @@ class PostgresConfig(BaseModel):
             )
 
 
+class AutomationAnywhereConfig(BaseModel):
+    """Control Room do Automation Anywhere (A360) — para acionar robôs."""
+
+    model_config = ConfigDict(frozen=True)
+
+    control_room_url: str
+    username: str
+    password: str = ""
+    api_key: str = ""
+    verify_ssl: bool = True
+    timeout: float = 60.0
+    # Endpoint de autenticação do CR (alguns ambientes usam /v2/authentication).
+    auth_path: str = "/v1/authentication"
+    # Runners em ordem de preferência: candidato 1 → candidato 2 (fallback).
+    run_as_user_ids: tuple = ()
+
+    @classmethod
+    def from_env(cls) -> "AutomationAnywhereConfig":
+        ids_str = _get_env("AA_RUN_AS_USER_IDS", "") or ""
+        run_as_user_ids = tuple(
+            int(x.strip()) for x in ids_str.split(",") if x.strip().isdigit()
+        )
+        return cls(
+            control_room_url=_get_env("AA_CONTROL_ROOM_URL", "") or "",
+            username=_get_env("AA_USERNAME", "") or "",
+            password=_get_env("AA_PASSWORD", "") or "",
+            api_key=_get_env("AA_API_KEY", "") or "",
+            verify_ssl=_get_env_bool("AA_VERIFY_SSL", True),
+            timeout=_get_env_float("AA_TIMEOUT", 60.0) or 60.0,
+            auth_path=_get_env("AA_AUTH_PATH", "/v1/authentication") or "/v1/authentication",
+            run_as_user_ids=run_as_user_ids,
+        )
+
+    def validate(self) -> None:
+        missing: list[str] = []
+
+        if not self.control_room_url:
+            missing.append("AA_CONTROL_ROOM_URL")
+        if not self.username:
+            missing.append("AA_USERNAME")
+        if not self.password and not self.api_key:
+            missing.append("AA_PASSWORD ou AA_API_KEY")
+
+        if missing:
+            raise ValueError(
+                f"Variáveis obrigatórias do Automation Anywhere não encontradas no .env: {', '.join(missing)}"
+            )
+
+
 class LogConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -181,4 +230,5 @@ class LogConfig(BaseModel):
 
 sap_config = SapConfig.from_env()
 postgres_config = PostgresConfig.from_env()
+aa_config = AutomationAnywhereConfig.from_env()
 log_config = LogConfig.from_env()

@@ -15,7 +15,8 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from src.config.process_definitions import get_processos_ativos
-from src.config.settings import log_config, postgres_config, sap_config
+from src.config.settings import aa_config, log_config, postgres_config, sap_config
+from src.connectors.automation_anywhere_connector import AutomationAnywhereConnector
 from src.domain.enums import StatusProcesso
 from src.connectors.hana_connector import HanaConnector
 from src.connectors.postgres_connector import PostgresConnector
@@ -29,6 +30,75 @@ from src.utils.teams_notifier import notify_teams_safe
 
 SEPARADOR = "-" * 80
 SEPARADOR_PRINCIPAL = "=" * 80
+
+
+def _aa_guard_check(logger: Any, file_ids: List[int]) -> bool:
+    """Verifica se algum bot de escrituração está ativo no Control Room.
+
+    Retorna True se algum está rodando (ciclo deve ser abortado).
+    Retorna False se todos estão livres (pode prosseguir).
+    Erros de conexão ao AA são logados mas NÃO abortam o ciclo.
+    """
+    if not file_ids or not aa_config.run_as_user_ids:
+        return False
+    aa = None
+    try:
+        aa = AutomationAnywhereConnector(aa_config, logger=logger)
+        aa.connect()
+        bot_ocupado = aa.any_bot_running(file_ids)
+        if bot_ocupado:
+            logger.warning(
+                "⏸️ AA: bot de escrituração em andamento (fileId=%s) — ciclo adiado para próxima execução",
+                bot_ocupado,
+            )
+            return True
+        logger.info("✅ AA: nenhum bot de escrituração em andamento — prosseguindo")
+        return False
+    except Exception as exc:
+        logger.warning("⚠️ AA: falha ao verificar status dos bots (%s) — prosseguindo normalmente", exc)
+        return False
+    finally:
+        if aa is not None:
+            try:
+                aa.close()
+            except Exception:
+                pass
+
+
+def _schedule_aa_safe(
+    logger: Any,
+    file_id: int,
+    runner_ids: List[int],
+    delay_minutes: int = 3,
+) -> None:
+    """Agenda o bot AA daqui `delay_minutes` minutos no primeiro runner livre. Nunca levanta exceção."""
+    aa = None
+    try:
+        aa = AutomationAnywhereConnector(aa_config, logger=logger)
+        aa.connect()
+
+        runner_id = aa.pick_runner(runner_ids)
+        if runner_id is None:
+            logger.warning("⚠️ AA: todos os runners estão ocupados — agendamento ignorado | fileId=%s", file_id)
+            return
+
+        schedule_id = aa.schedule_bot(
+            file_id=file_id,
+            run_as_user_id=runner_id,
+            delay_minutes=delay_minutes,
+        )
+        logger.info(
+            "📅 AA: agendamento criado | fileId=%s | runner=%s | scheduleId=%s | em +%smin",
+            file_id, runner_id, schedule_id, delay_minutes,
+        )
+    except Exception as exc:
+        logger.warning("⚠️ AA: falha ao agendar bot fileId=%s: %s", file_id, exc)
+    finally:
+        if aa is not None:
+            try:
+                aa.close()
+            except Exception:
+                pass
 
 
 def _registrar_resultado_processo(
@@ -168,6 +238,26 @@ class Application:
 
             logger.info("📦 Total de processos ativos: %s", len(processos))
 
+            # Guard AA: se algum bot de escrituração estiver rodando, abortar o ciclo inteiro.
+            # Não truncar, não consultar — aguardar a próxima execução agendada pelo Windows.
+            aa_file_ids = [p.aa_file_id for p in processos if p.aa_file_id]
+            if _aa_guard_check(logger=logger, file_ids=aa_file_ids):
+                finished_at = self._now()
+                payload = build_execution_summary(
+                    process_name=process_name,
+                    environment=environment,
+                    target_schemas=target_schemas,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    processos_executados=[],
+                    processos_com_erro=[],
+                )
+                log_execution_summary(logger, payload)
+                if teams_url:
+                    notify_teams_safe(logger=logger, url=teams_url, execution_summary=payload)
+                print(json.dumps(payload, ensure_ascii=False, indent=4))
+                return payload
+
             tabelas_destino = {p.tabela_destino for p in processos}
             for schema in target_schemas:
                 for tabela in tabelas_destino:
@@ -259,6 +349,16 @@ class Application:
                                 len(df_aptas),
                             )
                             logger.info(SEPARADOR)
+
+                        # Agendamento AA — uma vez por processo, após salvar em todos os schemas.
+                        # O bot roda daqui 3 minutos no primeiro runner livre.
+                        if processo.aa_file_id and aa_config.run_as_user_ids:
+                            _schedule_aa_safe(
+                                logger=logger,
+                                file_id=processo.aa_file_id,
+                                runner_ids=list(aa_config.run_as_user_ids),
+                                delay_minutes=3,
+                            )
 
                     status_col = (
                         df["status_execucao"] if "status_execucao" in df.columns else None

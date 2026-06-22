@@ -43,6 +43,7 @@ def load_processos(
                 ativo=item.get("ativo", True),
                 truncate_before_insert=item.get("truncate_before_insert", False),
                 drop_and_create=item.get("drop_and_create", False),
+                aa_file_id=item.get("aa_file_id"),
             )
         )
     return processos
