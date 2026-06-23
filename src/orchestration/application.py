@@ -14,6 +14,9 @@ import os
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+import pandas as pd
+
+from src.config.ddl_complemento import COMPLEMENTO_NOTAS_DDL
 from src.config.process_definitions import get_processos_ativos
 from src.config.settings import aa_config, log_config, postgres_config, sap_config
 from src.connectors.automation_anywhere_connector import AutomationAnywhereConnector
@@ -70,8 +73,9 @@ def _schedule_aa_safe(
     file_id: int,
     runner_ids: List[int],
     delay_minutes: int = 3,
-) -> None:
-    """Agenda o bot AA daqui `delay_minutes` minutos no primeiro runner livre. Nunca levanta exceção."""
+) -> Optional[int]:
+    """Agenda o bot AA daqui `delay_minutes` minutos no primeiro runner livre.
+    Retorna o runner_id usado, ou None se não agendou. Nunca levanta exceção."""
     aa = None
     try:
         aa = AutomationAnywhereConnector(aa_config, logger=logger)
@@ -80,7 +84,7 @@ def _schedule_aa_safe(
         runner_id = aa.pick_runner(runner_ids)
         if runner_id is None:
             logger.warning("⚠️ AA: todos os runners estão ocupados — agendamento ignorado | fileId=%s", file_id)
-            return
+            return None
 
         schedule_id = aa.schedule_bot(
             file_id=file_id,
@@ -91,8 +95,10 @@ def _schedule_aa_safe(
             "📅 AA: agendamento criado | fileId=%s | runner=%s | scheduleId=%s | em +%smin",
             file_id, runner_id, schedule_id, delay_minutes,
         )
+        return runner_id
     except Exception as exc:
         logger.warning("⚠️ AA: falha ao agendar bot fileId=%s: %s", file_id, exc)
+        return None
     finally:
         if aa is not None:
             try:
@@ -109,6 +115,7 @@ def _registrar_resultado_processo(
     duration_seconds: float,
     rows_aptas: int = 0,
     rows_pendentes: int = 0,
+    aa_runner_id: Optional[int] = None,
 ) -> None:
     processos_executados.append(
         {
@@ -118,6 +125,7 @@ def _registrar_resultado_processo(
             "rows_aptas": int(rows_aptas or 0),
             "rows_pendentes": int(rows_pendentes or 0),
             "duration_seconds": round(float(duration_seconds or 0), 4),
+            "aa_runner_id": aa_runner_id,
         }
     )
 
@@ -311,65 +319,69 @@ class Application:
                     df_prepared = resultado_service.preparar_dataframe_para_banco(df)
                     log_colunas_formatado(logger, df_prepared)
 
-                    df_aptas = (
-                        df[df["status_execucao"] == StatusProcesso.SUCESSO.value]
-                        if "status_execucao" in df.columns
-                        else df
+                    _docnum_col = next(
+                        (c for c in df.columns if c.upper() == "DOCNUM"), None
                     )
+                    df_aptas = (
+                        df[df[_docnum_col].notna() & (df[_docnum_col].astype(str).str.strip() != "")]
+                        if _docnum_col is not None
+                        else pd.DataFrame()
+                    )
+
+                    aa_runner_id: Optional[int] = None
 
                     if df_aptas.empty:
                         logger.info(
-                            "ℹ️ Nenhuma nota apta para escrituração — banco não atualizado | processo=%s",
+                            "ℹ️ Nenhuma nota apta para escrituração | processo=%s",
                             processo.process_name,
                         )
-                    else:
-                        for schema_idx, target_schema in enumerate(target_schemas, start=1):
-                            logger.info(SEPARADOR)
-                            logger.info(
-                                "🗄️ Iniciando carga PostgreSQL [%s/%s] | schema=%s | tabela=%s | aptas=%s",
-                                schema_idx,
-                                len(target_schemas),
-                                target_schema,
-                                processo.tabela_destino,
-                                len(df_aptas),
-                            )
 
-                            resultado_service.salvar_no_postgres(
-                                df=df_aptas,
-                                table_name=processo.tabela_destino,
-                                schema=target_schema,
-                                truncate_before_insert=processo.truncate_before_insert,
-                                drop_and_create=processo.drop_and_create,
-                            )
+                    # Sempre garante o schema da tabela (mesmo sem aptas) e insere se houver.
+                    for schema_idx, target_schema in enumerate(target_schemas, start=1):
+                        logger.info(SEPARADOR)
+                        logger.info(
+                            "🗄️ Garantindo schema PostgreSQL [%s/%s] | schema=%s | tabela=%s | aptas=%s",
+                            schema_idx,
+                            len(target_schemas),
+                            target_schema,
+                            processo.tabela_destino,
+                            len(df_aptas),
+                        )
 
+                        resultado_service.salvar_no_postgres(
+                            df=df_aptas,
+                            table_name=processo.tabela_destino,
+                            schema=target_schema,
+                            truncate_before_insert=processo.truncate_before_insert,
+                            drop_and_create=processo.drop_and_create,
+                            predefined_columns=COMPLEMENTO_NOTAS_DDL,
+                        )
+
+                        if not df_aptas.empty:
                             logger.info(
                                 "✅ Dados salvos no PostgreSQL | schema=%s | tabela=%s | linhas=%s",
                                 target_schema,
                                 processo.tabela_destino,
                                 len(df_aptas),
                             )
-                            logger.info(SEPARADOR)
+                        logger.info(SEPARADOR)
 
-                        # Agendamento AA — uma vez por processo, após salvar em todos os schemas.
-                        # O bot roda daqui 3 minutos no primeiro runner livre.
-                        if processo.aa_file_id and aa_config.run_as_user_ids:
-                            _schedule_aa_safe(
-                                logger=logger,
-                                file_id=processo.aa_file_id,
-                                runner_ids=list(aa_config.run_as_user_ids),
-                                delay_minutes=3,
-                            )
+                    # Agendamento AA — uma vez por processo, após salvar em todos os schemas.
+                    if not df_aptas.empty and processo.aa_file_id and aa_config.run_as_user_ids:
+                        aa_runner_id = _schedule_aa_safe(
+                            logger=logger,
+                            file_id=processo.aa_file_id,
+                            runner_ids=list(aa_config.run_as_user_ids),
+                            delay_minutes=3,
+                        )
 
-                    status_col = (
-                        df["status_execucao"] if "status_execucao" in df.columns else None
-                    )
-                    rows_aptas = (
-                        int((status_col == StatusProcesso.SUCESSO.value).sum())
-                        if status_col is not None else 0
+                    rows_aptas = len(df_aptas)
+                    _status_col_name = next(
+                        (c for c in df.columns if c.upper() == "STATUS_EXECUCAO"), None
                     )
                     rows_pendentes = (
-                        int((status_col == StatusProcesso.SEM_RETORNO.value).sum())
-                        if status_col is not None else 0
+                        int((df[_status_col_name] == StatusProcesso.SEM_RETORNO.value).sum())
+                        if _status_col_name is not None else 0
                     )
 
                     _registrar_resultado_processo(
@@ -380,6 +392,7 @@ class Application:
                         duration_seconds=(self._now() - processo_inicio).total_seconds(),
                         rows_aptas=rows_aptas,
                         rows_pendentes=rows_pendentes,
+                        aa_runner_id=aa_runner_id,
                     )
 
                 except Exception as exc_processo:

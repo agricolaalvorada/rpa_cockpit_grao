@@ -247,9 +247,5 @@ INNER JOIN vtin_fallback
     ON LTRIM(ctr.CPF_CNPJ, '0') = LTRIM(vtin_fallback.VTIN_CPF_CNPJ, '0')
    AND zmmt_base.QTDE IS NOT NULL
    AND ROUND(zmmt_base.QTDE, 3) = ROUND(vtin_fallback.VTIN_QTDE, 3)
-   AND (
-        ROUND(zmmt_base.VALOR, 2) = ROUND(vtin_fallback.VTIN_VLR_NF, 2)
-        OR ROUND(zmmt_base.VALOR, 2) = ROUND(vtin_fallback.A_VTIN_VLR_NF, 2)
-   )
-WHERE (zmmt_base.MIRO_DOC IS NULL OR zmmt_base.MIRO_DOC = '')
-  AND YEAR(vtin_fallback.VTIN_DT_EMISSAO) IN ({anos});
+   AND vtin_fallback.VTIN_DT_EMISSAO >= ADD_DAYS(TO_DATE(zmmt_base."DATA", 'YYYYMMDD'), -90)
+WHERE YEAR(vtin_fallback.VTIN_DT_EMISSAO) IN ({anos});

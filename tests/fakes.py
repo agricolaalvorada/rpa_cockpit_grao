@@ -20,14 +20,15 @@ def _df_snapshot(df) -> dict:
 
 
 class FakeHanaConnector:
-    def __init__(self, responses: Dict[tuple, Any], schema: str = "SAPABAP1", safra_ano: int = 2026):
+    def __init__(self, responses: Dict[tuple, Any], schema: str = "SAPABAP1", safra_anos: tuple = (2026,)):
         self.responses = responses
         self.schema = schema
-        self.safra_ano = safra_ano
+        self.safra_anos = safra_anos
         self.queries: List[tuple] = []  # (sql, params_key)
 
     def render_sql_template(self, sql: str) -> str:
-        return sql.format(schema=self.schema, ano=self.safra_ano)
+        anos_str = ", ".join(str(a) for a in self.safra_anos)
+        return sql.replace("{schema}", self.schema).replace("{anos}", anos_str)
 
     def execute_query(self, sql: str, params: Optional[Any] = None) -> List[Dict[str, Any]]:
         key = tuple(params) if params is not None else None

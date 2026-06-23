@@ -10,6 +10,7 @@ ESPERADO = [
     ("V2_Consulta_Comp_CTR_S_FIXACAO", ["doc_compra", "numero_cockpit", "doc_compra"]),
     ("V2_Consulta_Comp_CTR_C_FIXACAO", ["doc_compra", "numero_cockpit", "doc_compra"]),
     ("V2_Consulta_Comp_ARMAZEN", ["n_contrato", "numero_cockpit", "n_contrato"]),
+    ("V2_Consulta_Comp_VALOR", ["doc_compra", "numero_cockpit", "doc_compra"]),
 ]
 
 
@@ -36,5 +37,5 @@ def test_paths_resolvem_para_arquivos_existentes():
 
 
 def test_shim_reexporta_api():
-    assert len(PROCESSOS) == 4
-    assert len(get_processos_ativos()) == 4
+    assert len(PROCESSOS) == 5
+    assert len(get_processos_ativos()) == 5

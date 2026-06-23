@@ -160,6 +160,13 @@ class ProcessRunner:
 
         df = pd.DataFrame(resultado_final)
 
+        df = df.rename(columns={
+            "chave_acesso":       "vtin_chave_acesso",
+            "data_processamento": "vtin_dt_proc",
+            "hora_processamento": "vtin_hr_proc",
+        })
+        df.columns = df.columns.str.upper()
+
         logger.info(SEPARADOR)
         logger.info("🏁 Processo finalizado: %s", process.process_name)
         logger.info("📊 Total de linhas consolidadas: %s", len(df))

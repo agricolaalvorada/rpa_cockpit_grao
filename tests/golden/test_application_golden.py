@@ -36,7 +36,7 @@ class _RecordingResultado:
         self.calls.append(["preparar", list(df.columns)])
         return df  # mantém colunas (o golden checa que o save recebe o df CRU)
 
-    def salvar_no_postgres(self, df, table_name, schema, truncate_before_insert, drop_and_create):
+    def salvar_no_postgres(self, df, table_name, schema, truncate_before_insert, drop_and_create, predefined_columns=None):
         self.calls.append([
             "salvar", schema, table_name, list(df.columns),
             truncate_before_insert, drop_and_create,

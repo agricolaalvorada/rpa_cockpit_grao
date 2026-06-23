@@ -29,7 +29,8 @@
       "rows_aptas": 1,
       "rows_pendentes": 0,
       "duration_seconds": 0.0,
-      "duration_formatted": "00:00:00"
+      "duration_formatted": "00:00:00",
+      "aa_runner_id": null
     }
   ],
   "processos_com_erro": []

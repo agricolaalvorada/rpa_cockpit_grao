@@ -75,19 +75,20 @@ def test_adaptive_card_estrutura():
     assert "SAP_ESCRITURAR_V2" in dump
     assert "P1" in dump and "P2" in dump
     assert "🧨 Erros encontrados" in dump  # bloco de erro presente
-    assert "Aptas" in dump and "Pendentes" in dump  # KPIs promovidos ao topo
-    assert '"color": "Good"' in dump      # aptas em verde
-    assert "30 aptas" in dump             # subtitulo por processo
+    assert '"color": "Good"' in dump       # aptas em verde
+    assert "30 aptas" in dump              # resumo por processo
+    assert "aguardando" in dump            # barra de totais presente
 
 
-def test_kpis_aptas_pendentes_no_topo():
-    cols = tn._build_kpi_columns(SUMMARY)
-    titulos = [c["items"][0]["text"] for c in cols]
-    assert titulos[:2] == ["Aptas", "Pendentes"]
-    # aptas = verde (Good), pendentes = âmbar (Warning)
-    assert cols[0]["items"][1].get("color") == "Good"
-    assert cols[1]["items"][1].get("color") == "Warning"
-    assert cols[0]["items"][1]["text"] == "30"
+def test_summary_bar():
+    bar = tn._build_summary_bar(SUMMARY)
+    cols = bar["items"][0]["columns"]
+    values = [c["items"][1]["text"] for c in cols]   # items[1] = número
+    assert any("42" in t for t in values)   # total linhas
+    assert any("30" in t for t in values)   # aptas
+    assert any("12" in t for t in values)   # pendentes
+    assert cols[1]["items"][1]["color"] == "Good"
+    assert cols[2]["items"][1]["color"] == "Warning"
 
 
 def test_adaptive_card_sem_erros_omite_bloco():

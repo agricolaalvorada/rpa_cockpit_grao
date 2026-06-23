@@ -252,4 +252,4 @@ INNER JOIN vtin_fallback
         OR ROUND(zmmt_base.VALOR, 2) = ROUND(vtin_fallback.A_VTIN_VLR_NF, 2)
    )
 WHERE (zmmt_base.MIRO_DOC IS NULL OR zmmt_base.MIRO_DOC = '')
-  AND YEAR(vtin_fallback.VTIN_DT_EMISSAO) = {ano};
+  AND YEAR(vtin_fallback.VTIN_DT_EMISSAO) IN ({anos});

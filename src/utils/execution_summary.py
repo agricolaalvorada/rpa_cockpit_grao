@@ -83,6 +83,7 @@ def build_execution_summary(
                 "rows_pendentes": int(proc.get("rows_pendentes", 0) or 0),
                 "duration_seconds": proc_duration,
                 "duration_formatted": format_duration(proc_duration),
+                "aa_runner_id": proc.get("aa_runner_id"),
             }
         )
 

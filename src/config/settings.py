@@ -67,6 +67,12 @@ def _get_env_bool(key: str, default: bool = False) -> bool:
     return value.lower() in {"1", "true", "yes", "sim", "y"}
 
 
+def _parse_anos(raw: str) -> tuple:
+    """Converte 'SAFRA_ANO' em tuple de ints. Aceita '2026' ou '2025,2026,2027'."""
+    parts = [x.strip() for x in raw.split(",") if x.strip().isdigit()]
+    return tuple(int(x) for x in parts) if parts else (date.today().year,)
+
+
 # =========================================================
 # CONFIGURAÇÕES (Pydantic, imutáveis)
 # =========================================================
@@ -81,8 +87,8 @@ class SapConfig(BaseModel):
     password: str
     connection_delay: float = 1.0
     query_delay: float = 0.5
-    # Ano da safra usado no filtro das consultas HANA (substitui o YEAR=2026 hardcoded).
-    safra_ano: int = Field(default_factory=lambda: date.today().year)
+    # Anos de safra usados no filtro IN das consultas HANA. Aceita 1 ou mais valores.
+    safra_anos: tuple = Field(default_factory=lambda: (date.today().year,))
 
     @classmethod
     def from_env(cls) -> "SapConfig":
@@ -95,7 +101,7 @@ class SapConfig(BaseModel):
             password=_get_env("SAP_PASSWORD", "") or "",
             connection_delay=_get_env_float("SAP_CONNECTION_DELAY", 1.0) or 1.0,
             query_delay=_get_env_float("SAP_QUERY_DELAY", 0.5) or 0.5,
-            safra_ano=_get_env_int("SAFRA_ANO", date.today().year) or date.today().year,
+            safra_anos=_parse_anos(_get_env("SAFRA_ANO", "") or ""),
         )
 
     def validate(self) -> None:

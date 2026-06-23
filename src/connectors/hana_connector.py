@@ -173,10 +173,11 @@ class HanaConnector:
             time.sleep(self.config.query_delay)
 
     def render_sql_template(self, sql: str) -> str:
+        anos_str = ", ".join(str(a) for a in self.config.safra_anos)
         return (
             sql
             .replace("{schema}", self.config.schema)
-            .replace("{ano}", str(self.config.safra_ano))
+            .replace("{anos}", anos_str)
         )
 
     def close(self) -> None:

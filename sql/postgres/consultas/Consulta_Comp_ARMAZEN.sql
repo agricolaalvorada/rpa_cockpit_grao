@@ -13,7 +13,10 @@ SELECT
     cqff.cod_parceiro,
     cqff.data_hora_ultima_atualizacao,
     split_cockpit.numero_cockpit,
-    cqff.msg_rpa
+    cqff.msg_rpa,
+    cqff.chave_acesso,
+    cqff.data_processamento,
+    cqff.hora_processamento
 FROM prod.complemento_quantidade_deposito_fila AS cqff
 CROSS JOIN LATERAL (
     SELECT DISTINCT TRIM(s) AS numero_cockpit

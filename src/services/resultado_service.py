@@ -8,15 +8,15 @@ import pandas as pd
 
 from src.connectors.postgres_connector import PostgresConnector
 
-# Chave natural do resultado (mantém histórico de tentativas: status no fim).
+# Chave natural do resultado.
 # Deve casar com o índice único criado pela migração (_migra_dedup.py).
 UPSERT_KEY_COLS = [
-    "process_name", "doc_compra", "n_contrato", "numero_cockpit", "docnum", "status_execucao",
+    "PROCESS_NAME", "DOC_COMPRA", "N_CONTRATO", "NUMERO_COCKPIT", "DOCNUM", "STATUS_EXECUCAO",
 ]
 UPSERT_INDEX_NAME = "ix_uq_complemento_notas_escrituracao"
 _UPSERT_KEY_SQL = (
-    "process_name, COALESCE(doc_compra,''), COALESCE(n_contrato,''), "
-    "COALESCE(numero_cockpit,''), COALESCE(docnum,''), status_execucao"
+    '"PROCESS_NAME", COALESCE("DOC_COMPRA",\'\'), COALESCE("N_CONTRATO",\'\'), '
+    'COALESCE("NUMERO_COCKPIT",\'\'), COALESCE("DOCNUM",\'\'), "STATUS_EXECUCAO"'
 )
 _UPSERT_CONFLICT_SQL = "(%s)" % _UPSERT_KEY_SQL
 
@@ -48,7 +48,7 @@ class ResultadoService:
         return "TEXT"
 
     def _normalizar_nome_coluna(self, nome_coluna: str) -> str:
-        nome = str(nome_coluna).strip().lower()
+        nome = str(nome_coluna).strip().upper()
         nome = unicodedata.normalize("NFD", nome).encode("ascii", "ignore").decode("ascii")
         nome = nome.replace(" ", "_")
         nome = nome.replace("-", "_")
@@ -57,7 +57,7 @@ class ResultadoService:
         nome = nome.replace(".", "_")
         nome = nome.replace("(", "")
         nome = nome.replace(")", "")
-        nome = nome.replace("%", "perc")
+        nome = nome.replace("%", "PERC")
         return nome
 
     def preparar_dataframe_para_banco(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -70,8 +70,28 @@ class ResultadoService:
 
         return novo_df
 
-    def garantir_tabela(self, df: pd.DataFrame, table_name: str, schema: str | None = None) -> Set[str]:
+    def garantir_tabela(
+        self,
+        df: pd.DataFrame,
+        table_name: str,
+        schema: str | None = None,
+        predefined_columns: Optional[Dict[str, str]] = None,
+    ) -> Set[str]:
         schema_name = schema or self.default_schema
+
+        if predefined_columns is not None:
+            if not self.postgres.table_exists(schema_name, table_name):
+                self.postgres.create_table(schema_name, table_name, predefined_columns)
+                return set(predefined_columns.keys())
+
+            existing_columns = set(self.postgres.get_table_columns(schema_name, table_name))
+            for col_name, col_type in predefined_columns.items():
+                if col_name not in existing_columns:
+                    self.postgres.add_column(schema_name, table_name, col_name, col_type)
+                    existing_columns.add(col_name)
+            return existing_columns
+
+        # Schema dinâmico (comportamento original)
         prepared_df = self.preparar_dataframe_para_banco(df)
 
         if prepared_df.empty:
@@ -102,23 +122,28 @@ class ResultadoService:
         schema: str | None = None,
         truncate_before_insert: bool = False,
         drop_and_create: bool = False,
+        predefined_columns: Optional[Dict[str, str]] = None,
     ) -> None:
         schema_name = schema or self.default_schema
         prepared_df = self.preparar_dataframe_para_banco(df)
 
-        if prepared_df.empty:
-            return
-
         if drop_and_create:
             self.postgres.drop_table_if_exists(schema_name, table_name)
 
-        existing_cols = self.garantir_tabela(prepared_df, table_name, schema_name)
+        if predefined_columns is not None:
+            # DDL fixo: garante schema mesmo com df vazio
+            existing_cols = self.garantir_tabela(df, table_name, schema_name, predefined_columns)
+        elif prepared_df.empty:
+            return
+        else:
+            existing_cols = self.garantir_tabela(df, table_name, schema_name)
+
+        if prepared_df.empty:
+            return
 
         if truncate_before_insert and self.postgres.table_exists(schema_name, table_name):
             self.postgres.truncate_table(schema_name, table_name)
 
-        # garante a chave única e faz UPSERT (em vez de INSERT append-only) para
-        # não duplicar a tabela a cada ciclo, preservando o histórico de tentativas.
         self._garantir_chave_unica(table_name, schema_name, existing_cols)
         self.postgres.upsert_dataframe(
             schema_name, table_name, prepared_df, _UPSERT_CONFLICT_SQL

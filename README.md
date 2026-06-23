@@ -4,11 +4,11 @@ Pipeline de monitoramento em Python que, a cada ciclo, lê filas de pedidos/cont
 pendentes no **PostgreSQL**, consulta o **SAP HANA** para verificar se a NF-e pode
 ser escriturada (cruzando `ZMMT0022` × `VTIN` por CPF/CNPJ + quantidade + valor),
 consolida o resultado, grava via UPSERT nos schemas `dev` e `prod`
-(`tb_resultado_final_hana`), exporta um Excel e notifica o Teams via Power Automate.
+(`complemento_notas_escrituracao`), exporta um Excel e notifica o Teams via Power Automate.
 
 > **Status:** branch `refactor/escrituracao-v2` — Fase 1 (reestruturação em camadas) ✅
 > + Fase 2 (correções de negócio validadas em prod) ✅
-> + Integração Automation Anywhere ✅. 4 processos ativos. 78 testes.
+> + Integração Automation Anywhere ✅. **5 processos ativos. 78 testes.**
 > **PR ainda não aberto.**
 
 ---
@@ -39,10 +39,10 @@ eliminando conferência manual:
 | **Linguagem / runtime** | Python **3.11.9** (venv `.ESCR_SAPvenv`) |
 | **Banco de fila** | PostgreSQL 10.1.1.36:5432 · db `postgres` · schema `prod` |
 | **Banco HANA** | SAP HANA 10.2.3.244:30213 · db `ECP` · schema `SAPABAP1` · user `POWERBI` |
-| **Processos ativos** | `CTRFIXO` (compra fixo) · `CTR_S_FIXACAO` (sem fixação) · `CTR_C_FIXACAO` (com fixação) · `ARMAZEN` (venda) |
+| **Processos ativos** | `CTRFIXO` · `CTR_S_FIXACAO` · `CTR_C_FIXACAO` · `ARMAZEN` · `VALOR` |
 | **Critério de escrituração** | `DOCNUM` preenchido em `J_1BNFE_ACTIVE` |
-| **Tabela de resultado** | `tb_resultado_final_hana` (schemas `dev` e `prod`) |
-| **Estratégia de gravação** | Truncate da tabela no início de cada ciclo + UPSERT com índice único por `(process_name, doc_compra, n_contrato, numero_cockpit, docnum, status_execucao)` |
+| **Tabela de resultado** | `complemento_notas_escrituracao` — 83 colunas UPPERCASE (schemas `dev` e `prod`) |
+| **Estratégia de gravação** | Truncate no início de cada ciclo + UPSERT com índice único por `(PROCESS_NAME, DOC_COMPRA, N_CONTRATO, NUMERO_COCKPIT, DOCNUM, STATUS_EXECUCAO)` |
 | **Export** | Excel em `data/output/{process_name}/` |
 | **Notificação** | Adaptive Card → Teams via `POWER_AUTOMATE_TEAMS_URL` (Power Automate) |
 | **Automação RPA** | Automation Anywhere A360 — agendamento do bot de escrituração (+3 min) após apta encontrada |
@@ -79,19 +79,26 @@ Instalar dependências de desenvolvimento:
 
 ## 4. Processos
 
-Os 4 processos são definidos em [`config/processes.yaml`](config/processes.yaml) e
+Os 5 processos são definidos em [`config/processes.yaml`](config/processes.yaml) e
 carregados dinamicamente por `ProcessLoader`. A ordem é preservada (afeta o payload
 do Teams).
 
-| `process_name` | Tipo de contrato | Parâmetros HANA | Fila PostgreSQL (entrada) | Tabela de resultado (saída) |
+| `process_name` | Tipo de contrato | Parâmetros HANA | Fila PostgreSQL (entrada) | Status da fila |
 |---|---|---|---|---|
-| `V2_Consulta_Comp_CTRFIXO` | Compra com preço fixo | `doc_compra`, `numero_cockpit` | `prod.complemento_quantidade_fixo_fila` | `dev/prod.tb_resultado_final_hana` |
-| `V2_Consulta_Comp_CTR_S_FIXACAO` | Compra sem fixação ("a fixar") | `doc_compra`, `numero_cockpit` | `prod.complemento_quantidade_sem_fixacao_fila` | `dev/prod.tb_resultado_final_hana` |
-| `V2_Consulta_Comp_CTR_C_FIXACAO` | Compra com fixação | `doc_compra`, `numero_cockpit` | `prod.complemento_quantidade_com_fixacao_fila` | `dev/prod.tb_resultado_final_hana` |
-| `V2_Consulta_Comp_ARMAZEN` | Venda / armazém | `n_contrato`, `numero_cockpit` | `prod.complemento_quantidade_deposito_fila` | `dev/prod.tb_resultado_final_hana` |
+| `V2_Consulta_Comp_CTRFIXO` | Compra com preço fixo | `doc_compra`, `numero_cockpit` | `prod.complemento_quantidade_fixo_fila` | `'12','13'` |
+| `V2_Consulta_Comp_CTR_S_FIXACAO` | Compra sem fixação ("a fixar") | `doc_compra`, `numero_cockpit` | `prod.complemento_quantidade_sem_fixacao_fila` | `'12','13','9'` |
+| `V2_Consulta_Comp_CTR_C_FIXACAO` | Compra com fixação | `doc_compra`, `numero_cockpit` | `prod.complemento_quantidade_com_fixacao_fila` | `'12','13'` |
+| `V2_Consulta_Comp_ARMAZEN` | Venda / armazém | `n_contrato`, `numero_cockpit` | `prod.complemento_quantidade_deposito_fila` | `'12','13'` |
+| `V2_Consulta_Comp_VALOR` | Complemento de valor (CFIN) | `doc_compra`, `numero_cockpit` | `prod.complem_valor_fila` | `'01'` |
 
-Cada fila usa `CROSS JOIN LATERAL regexp_split_to_table(numero_cockpit, '\|')` para
+Todos os resultados são gravados em `dev/prod.complemento_notas_escrituracao` (83 colunas UPPERCASE).
+
+As filas de quantidade usam `CROSS JOIN LATERAL regexp_split_to_table(numero_cockpit, '\|')` para
 explodir cockpits compostos em linhas individuais — uma consulta HANA por cockpit.
+
+> **Processo VALOR — lógica especial:** `ZMMT0022.VALOR` representa o valor do *complemento*
+> (diferença em centavos), não o total da NF. O match no HANA usa apenas CPF/CNPJ + QTDE,
+> sem filtro de valor, com âncora de data de ±90 dias a partir de `ZMMT0022."DATA"`.
 
 ---
 
@@ -105,6 +112,7 @@ src/
   │                          # + ProcessDefinition (Pydantic) + protocols — sem I/O
   config/                    # SapConfig/PostgresConfig/LogConfig (Pydantic + from_env())
   │                          # + ProcessLoader (YAML) + process_definitions (shim de compat.)
+  │                          # + ddl_complemento.py (DDL fixo 83 cols UPPERCASE)
   connectors/                # HanaConnector (retry automático) · PostgresConnector (DDL/DML/UPSERT)
   │                          # + AutomationAnywhereConnector (auth/CB/retry · guard · schedule)
   services/                  # ProcessRunner (fila → HANA → DataFrame)
@@ -112,8 +120,8 @@ src/
   orchestration/             # Application (orquestra o ciclo) · column_log
   utils/                     # logger · paths · execution_summary · teams_notifier
 sql/
-  postgres/consultas/        # 3 SQLs de leitura de fila (Consulta_Comp_*.sql)
-  sap_hana/consultas/        # 3 SQLs HANA (estrutura: CTEs zmmt_base / ctr / vtin2)
+  postgres/consultas/        # 5 SQLs de leitura de fila (Consulta_Comp_*.sql)
+  sap_hana/consultas/        # 5 SQLs HANA (estrutura: CTEs zmmt_base / ctr / vtin_fallback)
 tests/
   golden/                    # testes de caracterização (travam DataFrame, seq. gravação, payload)
   unit/                      # normalização, DDL, enums, settings, loader, import surface
@@ -200,31 +208,36 @@ Scripts de diagnóstico disponíveis na raiz (rodar direto pelo venv, não afeta
 | Banco | `postgres` |
 | Schema das filas | `prod` (hardcoded nos SQLs de fila) |
 | Schema de resultado | `dev` e `prod` (configurável via `TARGET_SCHEMAS` em `Application`) |
-| Tabela de resultado | `tb_resultado_final_hana` |
+| Tabela de resultado | `complemento_notas_escrituracao` |
 
-A tabela de resultado é **criada automaticamente** se não existir; colunas novas são
-adicionadas via `ADD COLUMN IF NOT EXISTS`. Os 4 processos compartilham a mesma
-tabela (colunas levemente diferentes entre processos).
+A tabela de resultado tem **83 colunas UPPERCASE**, schema pré-definido em
+`src/config/ddl_complemento.py` — criada com todas as colunas mesmo quando não há
+registros aptos (evita tabela incompleta em ciclos onde todos retornam SEM_RETORNO).
+Os 5 processos compartilham a mesma tabela.
 
-**Índice único** (criado por `_migra_dedup.py`):
+**Índice único:**
 
 ```sql
-CREATE UNIQUE INDEX ix_uq_tb_resultado_final_hana
-ON tb_resultado_final_hana (
-    process_name,
-    COALESCE(doc_compra, ''),
-    COALESCE(n_contrato, ''),
-    COALESCE(numero_cockpit, ''),
-    COALESCE(docnum, ''),
-    status_execucao
+CREATE UNIQUE INDEX ix_uq_complemento_notas_escrituracao
+ON complemento_notas_escrituracao (
+    "PROCESS_NAME",
+    COALESCE("DOC_COMPRA", ''),
+    COALESCE("N_CONTRATO", ''),
+    COALESCE("NUMERO_COCKPIT", ''),
+    COALESCE("DOCNUM", ''),
+    "STATUS_EXECUCAO"
 );
 ```
 
-> ⚠️ Não usar código de versão anterior (append puro) após a migração — viola o índice único.
+> ⚠️ Somente linhas com `DOCNUM` preenchido são gravadas — `DOCNUM` preenchido = nota escriturada.
 
 ### Dicionário dos campos das filas
 
-Campos presentes nas 4 tabelas de fila (`complemento_quantidade_*_fila`):
+#### Filas de quantidade — `complemento_quantidade_*_fila` (4 tabelas)
+
+Campos presentes nas 4 tabelas de fila de quantidade (`complemento_quantidade_fixo_fila`,
+`complemento_quantidade_sem_fixacao_fila`, `complemento_quantidade_com_fixacao_fila`,
+`complemento_quantidade_deposito_fila`):
 
 **Identificação / controle**
 
@@ -284,6 +297,27 @@ Campos presentes nas 4 tabelas de fila (`complemento_quantidade_*_fila`):
 | Campo | Tipo | Descrição |
 |---|---|---|
 | `fixacao` | varchar | Número da fixação de preço vinculada ao cockpit |
+
+#### Fila de complemento de valor — `complem_valor_fila` (processo VALOR)
+
+Schema diferente das demais filas. Lida com `ctr_status = '01'` (NF de complemento
+solicitada com sucesso pelo cockpit).
+
+| Campo | Tipo | Descrição / mapeamento para o HANA |
+|---|---|---|
+| `id` | integer | PK da fila |
+| `ctr_status` | varchar | Ciclo de vida: `01` = apta para consulta |
+| `ctr_description` | varchar | Descrição textual do status |
+| `tipo_complemento` | varchar | Tipo de complemento (ex.: `CFIN`) |
+| `n_contrato` | varchar | Número do contrato |
+| `documento_compras` | varchar | Pedido de compra (EBELN) → `doc_compra` → parâmetro 1 do HANA |
+| `id_cockpit` | varchar | ID(s) do cockpit separados por `\|` → `numero_cockpit` → parâmetro 2 do HANA |
+| `centro` | varchar | Centro SAP |
+| `safra` | varchar | Safra de referência |
+| `material` | varchar | Código do material SAP |
+| `codigo_parceiro` | varchar | Código do fornecedor/cliente → `cod_parceiro` |
+| `ctr_last_updated` | varchar | Data/hora da última atualização → `data_hora_ultima_atualizacao` |
+| `msg_sap` | varchar | Mensagem do RPA → `msg_rpa` |
 
 ### SAP HANA — fonte de verdade
 
@@ -359,7 +393,7 @@ LOG_LEVEL=INFO
 LOG_SAVE_FILE=true
 ```
 
-> `SAFRA_ANO` substitui o filtro `YEAR(VTIN_DT_CRIACAO)` nas 3 queries HANA. Se omitido,
+> `SAFRA_ANO` substitui o filtro `YEAR(VTIN_DT_EMISSAO)` nas 5 queries HANA. Se omitido,
 > usa o ano corrente automaticamente — **não é necessário atualizar anualmente**.
 
 Processos são configurados em [`config/processes.yaml`](config/processes.yaml)
@@ -388,6 +422,7 @@ preservando os dados da execução em andamento até a próxima janela do Task S
 | `V2_Consulta_Comp_CTR_S_FIXACAO` | `1266717` | `MainEscriturarNotaComplementoSemFixacao` |
 | `V2_Consulta_Comp_CTR_C_FIXACAO` | `1233302` | `MainEscriturarNotaComplementoComFixacao` |
 | `V2_Consulta_Comp_ARMAZEN` | `1310535` | `MainEscriturarNotaComplementoDeposito` |
+| `V2_Consulta_Comp_VALOR` | *(pendente — bot ainda não criado no AA)* | `MainEscriturarNotaComplementoValor` (a criar) |
 
 ### 9.3 Seleção de runner
 
@@ -446,22 +481,26 @@ python -m venv .ESCR_SAPvenv
 
 1. **Valida conexões** com HANA e PostgreSQL (teste de query simples em cada).
 2. **Carrega processos ativos** de `config/processes.yaml`.
-3. **Trunca a tabela de resultado** (`tb_resultado_final_hana`) em `dev` e `prod` —
+3. **Trunca a tabela de resultado** (`complemento_notas_escrituracao`) em `dev` e `prod` —
    uma única vez antes do loop, garantindo que cada ciclo reflita apenas o estado atual.
 4. Para cada processo:
-   a. **Lê a fila** PostgreSQL (status `12`/`13`) via SQL file; cockpits separados
-      por `|` são explodidos em linhas individuais (`CROSS JOIN LATERAL`).
+   a. **Lê a fila** PostgreSQL (status `12`/`13` ou `01` para VALOR) via SQL file;
+      cockpits separados por `|` são explodidos em linhas individuais (`CROSS JOIN LATERAL`).
    b. Para cada linha da fila, **consulta o HANA**: 3 CTEs (`zmmt_base`, `ctr`,
-      `vtin2`) → retorna `DOCNUM`, `MIRO_DATA`, `RESULTADO` e metadados.
+      `vtin_fallback`) → retorna `DOCNUM`, `MIRO_DATA`, `RESULTADO` e metadados
+      via `UNION ALL` VIA_MIRO (determinístico) + VIA_CPF_MATCH (fallback fuzzy).
    c. Consolida em DataFrame com `process_name`, `data_execucao`,
       `status_execucao` (`SUCESSO` / `SEM_RETORNO` / `ERRO`), `tempo_execucao`.
 5. **Exporta Excel** em `data/output/{process_name}/{process_name}_YYYYMMDD_HHMMSS.xlsx`.
-6. **Normaliza** o DataFrame (colunas lowercase, sem acento, sem caracteres inválidos).
-7. **UPSERT** em `dev.tb_resultado_final_hana` e `prod.tb_resultado_final_hana`
-   (cria tabela/colunas se necessário; atualiza linha existente ou insere nova).
-8. **Monta `ExecutionSummary`** com KPIs (aptas / pendentes / erros / duração).
-9. **Loga** o resumo e envia **Adaptive Card** ao Teams separando notas aptas
-   de pendentes por processo.
+6. **Normaliza** o DataFrame (colunas UPPERCASE com `psycopg.sql.Identifier`).
+7. **Filtra aptas** (`DOCNUM` preenchido = nota escriturada) e faz **UPSERT** em
+   `dev.complemento_notas_escrituracao` e `prod.complemento_notas_escrituracao`
+   (83 colunas; cria tabela se não existir).
+8. **Agenda bot AA** (`schedule_bot`) para +3 min se há aptas — após confirmação que
+   a tabela já foi gravada.
+9. **Monta `ExecutionSummary`** com KPIs (aptas / pendentes / erros / duração).
+10. **Loga** o resumo e envia **Adaptive Card** ao Teams (card por processo com badge
+    colorido + barra de totais com TOTAL/APTAS/PENDENTES).
 
 ---
 
@@ -498,25 +537,38 @@ comportamento observável completo.
 
 Itens já corrigidos e validados nos sistemas reais:
 
-- ✅ `YEAR=2026` hardcoded → parametrizado via `SAFRA_ANO` (`SapConfig.safra_ano`)
+- ✅ `YEAR=2026` hardcoded → parametrizado via `SAFRA_ANO` no `.env` (`SapConfig.safra_ano`; padrão = ano corrente se omitido)
 - ✅ DDL com f-string → `psycopg.sql.Identifier` + rollback em `PostgresConnector`
 - ✅ `TO_NUMBER(zmmt.ID)` → `LTRIM(zmmt.ID,'0') = LTRIM(?,'0')` nos 3 SQL HANA
-- ✅ Gravação append-only → UPSERT com índice único em `tb_resultado_final_hana`
+- ✅ Gravação append-only → UPSERT com índice único em `complemento_notas_escrituracao`
   (`_migra_dedup.py <schema> --apply` dedupou dev e prod: 7.617 → 1.451 linhas)
 - ✅ `COALESCE(QTDE/VALOR, 0)` removido do match (evitava falso match com NULL/zero)
-- ✅ Split de cockpit com `DISTINCT` nas 3 filas Postgres
+- ✅ Split de cockpit com `DISTINCT` nas 5 filas Postgres
 - ✅ Regra de valor `CTR_S_FIXACAO` validada: afrouxar não recupera nenhuma nota
   real — **não alterado** (gargalo é existência da NF, não o valor)
 - ✅ Truncate da tabela de resultado no início de cada ciclo (`Application.run()`),
-  garantindo que `tb_resultado_final_hana` reflita apenas os dados do ciclo atual
+  garantindo que `complemento_notas_escrituracao` reflita apenas os dados do ciclo atual
+- ✅ `CODESTA='100'` (NF-e autorizada) corrigido de `'101'` (inutilização — 45k registros incorretos)
+- ✅ `YEAR(VTIN_DT_EMISSAO)` corrigido de `VTIN_DT_CRIACAO` (data de entrada no sistema)
+- ✅ `UNION ALL VIA_MIRO + VIA_CPF_MATCH` em todos os 5 SQLs HANA — caminho determinístico
+  (MIRO_DOC → J_1BNFDOC → DOCNUM) + fallback fuzzy (CPF+QTDE+VALOR quando MIRO_DOC vazio)
+- ✅ DDL fixo 83 colunas UPPERCASE (`src/config/ddl_complemento.py`) — tabela sempre criada com
+  todas as colunas, mesmo quando nenhum registro retorna apto no ciclo
+- ✅ Filtro por `DOCNUM` em vez de `status_execucao == SUCESSO` — regra de negócio: DOCNUM preenchido = escriturada
+- ✅ **Teams layout Opção B** — header com cor dinâmica por status (SUCESSO=verde, ERRO=vermelho, PARCIAL=laranja),
+  card por processo com badge colorido, barra de totais com 3 mini-KPIs
+- ✅ **5º processo VALOR** — novo tipo `V2_Consulta_Comp_VALOR` lendo `prod.complem_valor_fila`;
+  match por CPF+QTDE sem filtro de valor (ZMMT0022.VALOR = centavos do complemento, não o total da NF)
+- ✅ Integração Automation Anywhere — guard check antes do truncate + agendamento +3min após aptas salvas
 
 Pendente:
 
 - N+1 + `query_delay` — execução serial; requer reescrita de `ProcessRunner`
 - `SPART='01'` hardcoded nos SQL HANA
 - Retry (tenacity) nas consultas HANA
-- Pré-filtro das CTEs `ctr`/`vtin2` (varrem `EKKO`/`EKPO`/`VTIN` inteiro)
+- Pré-filtro das CTEs `ctr`/`vtin_fallback` (varrem `EKKO`/`EKPO`/`VTIN` inteiro)
 - `MANDT` não amarrado no join de compra (`EKKO`/`EKPO`)
+- `aa_file_id` do processo VALOR (aguardando criação do bot no Control Room)
 
 ---
 
@@ -536,6 +588,15 @@ Pendente:
   qtde/valor da **parcela**, não o total. Casar `ID == cockpit` resolve 75% dos casos.
 - **Checkout antigo (append puro) viola o índice único** criado pela migração —
   sempre usar a versão com UPSERT após rodar `_migra_dedup.py`.
+- **Processo VALOR — `ZMMT0022.VALOR` é o complemento, não o total da NF.**
+  Para registros CFIN, `ZMMT0022.VALOR` representa a diferença em centavos (ex.: R$ 0,17),
+  enquanto a NF real tem o valor total (ex.: R$ 915.919,83). O filtro de valor no
+  VIA_CPF_MATCH foi removido neste processo — substituído por âncora de data (±90 dias).
+  **Nunca reaplicar filtro de valor ao processo VALOR.** Nos demais processos
+  (CTRFIXO, CTR_S, CTR_C, ARMAZEN) o filtro de valor é necessário e correto.
+- **VIA_MIRO falha para CFIN:** `J_1BNFDOC.GJAHR ≠ ZMMT0022.MIRO_ANO` para complementos
+  de valor — o BELNR existe em outros anos no SAP, não no ano do MIRO_ANO. O path
+  VIA_MIRO está incluído no SQL mas não resolve para CFIN na prática.
 
 ---
 

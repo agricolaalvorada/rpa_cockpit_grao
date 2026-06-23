@@ -9,9 +9,9 @@ from tests.fakes import FakePostgresConnector
 from tests.golden_utils import assert_golden
 
 TABELA = "complemento_notas_escrituracao"
-# colunas da chave única já presentes (cenário realista de resultado consolidado)
-COLS_BASE = ["process_name", "doc_compra", "n_contrato", "numero_cockpit", "docnum",
-             "status_execucao", "valor"]
+# colunas da chave única já presentes (cenário realista de resultado consolidado) — UPPERCASE
+COLS_BASE = ["PROCESS_NAME", "DOC_COMPRA", "N_CONTRATO", "NUMERO_COCKPIT", "DOCNUM",
+             "STATUS_EXECUCAO", "VALOR"]
 
 
 def _df():
@@ -64,15 +64,15 @@ def test_salvar_df_vazio_nao_faz_nada():
 
 
 def test_garantir_chave_unica_adiciona_colunas_faltantes():
-    # tabela existe mas só com doc_compra -> as demais colunas-chave devem ser criadas
+    # tabela existe mas só com DOC_COMPRA -> as demais colunas-chave devem ser criadas
     pg = FakePostgresConnector(
         existing_tables={("dev", TABELA)},
-        table_columns={("dev", TABELA): ["doc_compra"]},
+        table_columns={("dev", TABELA): ["DOC_COMPRA"]},
     )
     ResultadoService(pg, default_schema="dev").salvar_no_postgres(_df(), TABELA, schema="dev")
     add_cols = [c[3] for c in pg.calls if c[0] == "add_column"]
-    # process_name, n_contrato, numero_cockpit, docnum, status_execucao (faltavam)
-    assert "status_execucao" in add_cols and "docnum" in add_cols
-    assert "doc_compra" not in add_cols  # já existia
+    # PROCESS_NAME, N_CONTRATO, NUMERO_COCKPIT, DOCNUM, STATUS_EXECUCAO, VALOR (faltavam)
+    assert "STATUS_EXECUCAO" in add_cols and "DOCNUM" in add_cols
+    assert "DOC_COMPRA" not in add_cols  # já existia
     assert any(c[0] == "ensure_unique_index" for c in pg.calls)
     assert any(c[0] == "upsert_dataframe" for c in pg.calls)

@@ -20,15 +20,16 @@ def test_qualify_substitui_ano_nos_sql_reais():
 
     for nome in SQLS:
         sql = (root / nome).read_text(encoding="utf-8")
-        assert "= {ano}" in sql, f"{nome} deveria conter o placeholder {{ano}}"
+        assert "IN ({anos})" in sql, f"{nome} deveria conter o placeholder {{anos}}"
         out = hana.render_sql_template(sql)
-        assert "{ano}" not in out
+        assert "{anos}" not in out
         assert "{" not in out and "}" not in out  # nenhuma chave solta
-        assert f"YEAR(vtin_fallback.VTIN_DT_EMISSAO) = {sap_config.safra_ano}" in out
+        anos_str = ", ".join(str(a) for a in sap_config.safra_anos)
+        assert f"YEAR(vtin_fallback.VTIN_DT_EMISSAO) IN ({anos_str})" in out
 
 
 def test_qualify_usa_ano_configurado():
     hana = HanaConnector(sap_config)
-    hana.config = sap_config.model_copy(update={"safra_ano": 2099})
-    out = hana.render_sql_template("WHERE YEAR(x) = {ano}")
-    assert out == "WHERE YEAR(x) = 2099"
+    hana.config = sap_config.model_copy(update={"safra_anos": (2099,)})
+    out = hana.render_sql_template("WHERE YEAR(x) IN ({anos})")
+    assert out == "WHERE YEAR(x) IN (2099)"

@@ -16,13 +16,13 @@ def svc():
 @pytest.mark.parametrize(
     "entrada,esperado",
     [
-        ("DOC Compra", "doc_compra"),
-        ("Situação Geral (%)", "situacao_geral_perc"),
-        ("Qtde-Líquida/NF", "qtde_liquida_nf"),
-        ("VALOR", "valor"),
-        ("Número.Cockpit", "numero_cockpit"),
-        ("CTR_DESCRIÇÃO_ITEM", "ctr_descricao_item"),
-        ("Endereço\\Caminho", "endereco_caminho"),
+        ("DOC Compra", "DOC_COMPRA"),
+        ("Situação Geral (%)", "SITUACAO_GERAL_PERC"),
+        ("Qtde-Líquida/NF", "QTDE_LIQUIDA_NF"),
+        ("VALOR", "VALOR"),
+        ("Número.Cockpit", "NUMERO_COCKPIT"),
+        ("CTR_DESCRIÇÃO_ITEM", "CTR_DESCRICAO_ITEM"),
+        ("Endereço\\Caminho", "ENDERECO_CAMINHO"),
     ],
 )
 def test_normalizar_nome_coluna(svc, entrada, esperado):
@@ -40,8 +40,8 @@ def test_mapear_tipo_sql(svc):
 def test_preparar_dataframe_normaliza_colunas_e_nulos(svc):
     df = pd.DataFrame([{"DOC Compra": "45", "Situação": None}])
     out = svc.preparar_dataframe_para_banco(df)
-    assert list(out.columns) == ["doc_compra", "situacao"]
-    assert out.iloc[0]["situacao"] is None
+    assert list(out.columns) == ["DOC_COMPRA", "SITUACAO"]
+    assert out.iloc[0]["SITUACAO"] is None
 
 
 def test_preparar_dataframe_vazio(svc):

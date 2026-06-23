@@ -64,10 +64,13 @@ def test_safra_ano_default_e_override(monkeypatch):
     from src.config.settings import SapConfig
 
     monkeypatch.delenv("SAFRA_ANO", raising=False)
-    assert SapConfig.from_env().safra_ano == date.today().year
+    assert SapConfig.from_env().safra_anos == (date.today().year,)
 
     monkeypatch.setenv("SAFRA_ANO", "2027")
-    assert SapConfig.from_env().safra_ano == 2027
+    assert SapConfig.from_env().safra_anos == (2027,)
+
+    monkeypatch.setenv("SAFRA_ANO", "2025,2026,2027")
+    assert SapConfig.from_env().safra_anos == (2025, 2026, 2027)
 
 
 def test_config_imutavel():
