@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import psycopg
+from psycopg import sql as pgsql
 from psycopg.rows import dict_row
 
 from src.config.settings import PostgresConfig
@@ -109,7 +110,7 @@ class PostgresConnector:
 
     def execute_non_query(
         self,
-        sql: str,
+        sql: Union[str, pgsql.Composable],
         params: Optional[tuple] = None,
     ) -> None:
         self.connect()
@@ -117,11 +118,15 @@ class PostgresConnector:
         if self.conn is None:
             raise RuntimeError("Conexão PostgreSQL não inicializada.")
 
-        with self.conn.cursor() as cursor:
-            cursor.execute(sql, params or ())
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(sql, params or ())
             self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
 
-    def execute_many(self, sql: str, data: List[tuple]) -> None:
+    def execute_many(self, sql: Union[str, pgsql.Composable], data: List[tuple]) -> None:
         if not data:
             return
 
@@ -130,9 +135,13 @@ class PostgresConnector:
         if self.conn is None:
             raise RuntimeError("Conexão PostgreSQL não inicializada.")
 
-        with self.conn.cursor() as cursor:
-            cursor.executemany(sql, data)
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.executemany(sql, data)
             self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
 
     def table_exists(self, schema: str, table: str) -> bool:
         sql = """
@@ -158,48 +167,82 @@ class PostgresConnector:
         return [row["column_name"] for row in result]
 
     def create_schema_if_not_exists(self, schema: str) -> None:
-        sql = f'CREATE SCHEMA IF NOT EXISTS "{schema}"'
-        self.execute_non_query(sql)
+        stmt = pgsql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(pgsql.Identifier(schema))
+        self.execute_non_query(stmt)
 
     def drop_table_if_exists(self, schema: str, table: str) -> None:
-        sql = f'DROP TABLE IF EXISTS "{schema}"."{table}"'
-        self.execute_non_query(sql)
+        stmt = pgsql.SQL("DROP TABLE IF EXISTS {}").format(pgsql.Identifier(schema, table))
+        self.execute_non_query(stmt)
 
     def truncate_table(self, schema: str, table: str) -> None:
-        sql = f'TRUNCATE TABLE "{schema}"."{table}"'
-        self.execute_non_query(sql)
+        stmt = pgsql.SQL("TRUNCATE TABLE {}").format(pgsql.Identifier(schema, table))
+        self.execute_non_query(stmt)
 
     def create_table(self, schema: str, table: str, columns: Dict[str, str]) -> None:
         self.create_schema_if_not_exists(schema)
 
-        cols = ",\n".join([f'"{col}" {dtype}' for col, dtype in columns.items()])
-
-        sql = f'''
-        CREATE TABLE IF NOT EXISTS "{schema}"."{table}" (
-            {cols}
+        cols = pgsql.SQL(",\n            ").join(
+            pgsql.SQL("{} {}").format(pgsql.Identifier(col), pgsql.SQL(dtype))
+            for col, dtype in columns.items()
         )
-        '''
-        self.execute_non_query(sql)
+
+        stmt = pgsql.SQL(
+            "CREATE TABLE IF NOT EXISTS {} (\n            {}\n        )"
+        ).format(pgsql.Identifier(schema, table), cols)
+        self.execute_non_query(stmt)
 
     def add_column(self, schema: str, table: str, column: str, dtype: str) -> None:
-        sql = f'''
-        ALTER TABLE "{schema}"."{table}"
-        ADD COLUMN IF NOT EXISTS "{column}" {dtype}
-        '''
-        self.execute_non_query(sql)
+        stmt = pgsql.SQL(
+            "ALTER TABLE {} ADD COLUMN IF NOT EXISTS {} {}"
+        ).format(pgsql.Identifier(schema, table), pgsql.Identifier(column), pgsql.SQL(dtype))
+        self.execute_non_query(stmt)
 
     def insert_dataframe(self, schema: str, table: str, df) -> None:
         if df.empty:
             return
 
         columns = list(df.columns)
-        placeholders = ", ".join(["%s"] * len(columns))
-        col_names = ", ".join([f'"{col}"' for col in columns])
+        col_ids = pgsql.SQL(", ").join(pgsql.Identifier(c) for c in columns)
+        placeholders = pgsql.SQL(", ").join(pgsql.Placeholder() for _ in columns)
 
-        sql = f'''
-        INSERT INTO "{schema}"."{table}" ({col_names})
-        VALUES ({placeholders})
-        '''
+        stmt = pgsql.SQL("INSERT INTO {} ({}) VALUES ({})").format(
+            pgsql.Identifier(schema, table), col_ids, placeholders
+        )
 
         data = [tuple(row) for row in df.itertuples(index=False, name=None)]
-        self.execute_many(sql, data)
+        self.execute_many(stmt, data)
+
+    def ensure_unique_index(self, schema: str, table: str, columns_sql: str, index_name: str) -> None:
+        """Cria índice único (IF NOT EXISTS). `columns_sql` é SQL controlado (constante)."""
+        stmt = pgsql.SQL("CREATE UNIQUE INDEX IF NOT EXISTS {} ON {} ({})").format(
+            pgsql.Identifier(index_name),
+            pgsql.Identifier(schema, table),
+            pgsql.SQL(columns_sql),
+        )
+        self.execute_non_query(stmt)
+
+    def upsert_dataframe(self, schema: str, table: str, df, conflict_sql: str) -> None:
+        """INSERT ... ON CONFLICT <conflict_sql> DO UPDATE. `conflict_sql` é SQL controlado."""
+        if df.empty:
+            return
+
+        columns = list(df.columns)
+        col_ids = pgsql.SQL(", ").join(pgsql.Identifier(c) for c in columns)
+        placeholders = pgsql.SQL(", ").join(pgsql.Placeholder() for _ in columns)
+        set_clause = pgsql.SQL(", ").join(
+            pgsql.SQL("{} = EXCLUDED.{}").format(pgsql.Identifier(c), pgsql.Identifier(c))
+            for c in columns
+        )
+
+        stmt = pgsql.SQL(
+            "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT {} DO UPDATE SET {}"
+        ).format(
+            pgsql.Identifier(schema, table),
+            col_ids,
+            placeholders,
+            pgsql.SQL(conflict_sql),
+            set_clause,
+        )
+
+        data = [tuple(row) for row in df.itertuples(index=False, name=None)]
+        self.execute_many(stmt, data)

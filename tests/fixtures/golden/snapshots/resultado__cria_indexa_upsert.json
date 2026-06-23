@@ -1,0 +1,65 @@
+[
+  [
+    "table_exists",
+    "dev",
+    "complemento_notas_escrituracao",
+    false
+  ],
+  [
+    "create_table",
+    "dev",
+    "complemento_notas_escrituracao",
+    {
+      "PROCESS_NAME": "TEXT",
+      "DOC_COMPRA": "TEXT",
+      "N_CONTRATO": "TEXT",
+      "NUMERO_COCKPIT": "TEXT",
+      "DOCNUM": "TEXT",
+      "STATUS_EXECUCAO": "TEXT",
+      "VALOR": "NUMERIC(18,6)"
+    }
+  ],
+  [
+    "ensure_unique_index",
+    "dev",
+    "complemento_notas_escrituracao",
+    "ix_uq_complemento_notas_escrituracao"
+  ],
+  [
+    "upsert_dataframe",
+    "dev",
+    "complemento_notas_escrituracao",
+    {
+      "columns": [
+        "PROCESS_NAME",
+        "DOC_COMPRA",
+        "N_CONTRATO",
+        "NUMERO_COCKPIT",
+        "DOCNUM",
+        "STATUS_EXECUCAO",
+        "VALOR"
+      ],
+      "records": [
+        {
+          "PROCESS_NAME": "V2_X",
+          "DOC_COMPRA": "4500451189",
+          "N_CONTRATO": "",
+          "NUMERO_COCKPIT": "123490",
+          "DOCNUM": "3038001",
+          "STATUS_EXECUCAO": "SUCESSO",
+          "VALOR": 19205.0
+        },
+        {
+          "PROCESS_NAME": "V2_X",
+          "DOC_COMPRA": "4500725349",
+          "N_CONTRATO": "",
+          "NUMERO_COCKPIT": "122253",
+          "DOCNUM": null,
+          "STATUS_EXECUCAO": "SEM_RETORNO",
+          "VALOR": null
+        }
+      ]
+    },
+    "(\"PROCESS_NAME\", COALESCE(\"DOC_COMPRA\",''), COALESCE(\"N_CONTRATO\",''), COALESCE(\"NUMERO_COCKPIT\",''), COALESCE(\"DOCNUM\",''), \"STATUS_EXECUCAO\")"
+  ]
+]

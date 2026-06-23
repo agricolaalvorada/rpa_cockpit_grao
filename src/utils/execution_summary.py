@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from typing import Any, Dict, List
+
+from src.domain.enums import StatusExecucaoGlobal, StatusProcesso
 
 
 SEPARADOR = "-" * 5
@@ -41,19 +44,29 @@ def build_execution_summary(
     processos_sucesso = sum(
         1
         for proc in processos_executados
-        if str(proc.get("status", "")).upper() == "SUCESSO"
+        if str(proc.get("status", "")).upper() == StatusProcesso.SUCESSO.value
     )
 
     processos_sem_dados = sum(
         1
         for proc in processos_executados
-        if str(proc.get("status", "")).upper() == "SEM_DADOS"
+        if str(proc.get("status", "")).upper() == StatusProcesso.SEM_DADOS.value
     )
 
     processos_erro = len(processos_com_erro)
 
     total_linhas_processadas = sum(
         int(proc.get("rows", 0) or 0)
+        for proc in processos_executados
+    )
+
+    total_notas_aptas = sum(
+        int(proc.get("rows_aptas", 0) or 0)
+        for proc in processos_executados
+    )
+
+    total_notas_pendentes = sum(
+        int(proc.get("rows_pendentes", 0) or 0)
         for proc in processos_executados
     )
 
@@ -66,23 +79,29 @@ def build_execution_summary(
                 "process_name": proc.get("process_name"),
                 "status": proc.get("status"),
                 "rows_processed": int(proc.get("rows", 0) or 0),
+                "rows_aptas": int(proc.get("rows_aptas", 0) or 0),
+                "rows_pendentes": int(proc.get("rows_pendentes", 0) or 0),
                 "duration_seconds": proc_duration,
                 "duration_formatted": format_duration(proc_duration),
+                "aa_runner_id": proc.get("aa_runner_id"),
             }
         )
 
-    if processos_erro == 0:
-        status_final = "SUCESSO"
+    if total_processos == 0 and processos_erro == 0:
+        status_final = StatusExecucaoGlobal.PARCIAL.value
+        message = "Nenhum processo ativo encontrado para executar."
+    elif processos_erro == 0:
+        status_final = StatusExecucaoGlobal.SUCESSO.value
         message = "Execução finalizada com sucesso."
     elif processos_sucesso > 0 or processos_sem_dados > 0:
-        status_final = "PARCIAL"
+        status_final = StatusExecucaoGlobal.PARCIAL.value
         message = "Execução finalizada com falhas parciais."
     else:
-        status_final = "ERRO"
+        status_final = StatusExecucaoGlobal.ERRO.value
         message = "Execução finalizada com erro."
 
     return {
-        "success": processos_erro == 0,
+        "success": processos_erro == 0 and total_processos > 0,
         "status": status_final,
         "message": message,
         "process_name": process_name,
@@ -98,13 +117,15 @@ def build_execution_summary(
             "processos_sem_dados": processos_sem_dados,
             "processos_erro": processos_erro,
             "total_linhas_processadas": total_linhas_processadas,
+            "total_notas_aptas": total_notas_aptas,
+            "total_notas_pendentes": total_notas_pendentes,
         },
         "processos_executados": processos_formatados,
         "processos_com_erro": processos_com_erro,
     }
 
 
-def log_execution_summary(logger, execution_summary: Dict[str, Any]) -> None:
+def log_execution_summary(logger: logging.Logger, execution_summary: Dict[str, Any]) -> None:
     """
     Escreve no logger um resumo final elegante da execução.
     """

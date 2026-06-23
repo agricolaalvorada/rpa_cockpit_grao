@@ -15,7 +15,7 @@ def _sanitize_file_name(value: str) -> str:
     return sanitized or "processo"
 
 
-def setup_logger(process_name: str, log_dir: Path, level: str = "INFO") -> logging.Logger:
+def setup_logger(process_name: str, log_dir: Path, level: str = "INFO", save_file: bool = True) -> logging.Logger:
     """
     Cria e configura um logger com saída em arquivo e console.
     """
@@ -39,18 +39,19 @@ def setup_logger(process_name: str, log_dir: Path, level: str = "INFO") -> loggi
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
-    file_handler.setLevel(getattr(logging, level.upper(), logging.INFO))
-    file_handler.setFormatter(formatter)
-
     console_handler = logging.StreamHandler()
     console_handler.setLevel(getattr(logging, level.upper(), logging.INFO))
     console_handler.setFormatter(formatter)
-
-    logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
+    if save_file:
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler.setLevel(getattr(logging, level.upper(), logging.INFO))
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
     logger.info("Logger iniciado.")
-    logger.info("Arquivo de log: %s", log_file)
+    if save_file:
+        logger.info("Arquivo de log: %s", log_file)
 
     return logger

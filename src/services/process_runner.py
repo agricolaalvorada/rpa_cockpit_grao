@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
+
+from hdbcli import dbapi
 
 from src.config.process_definitions import ProcessDefinition
 from src.connectors.hana_connector import HanaConnector
 from src.connectors.postgres_connector import PostgresConnector
+from src.domain.enums import StatusProcesso
 from src.utils.logger import setup_logger
 from src.utils.paths import get_log_dir
 
@@ -20,9 +24,11 @@ class ProcessRunner:
         self,
         postgres: PostgresConnector,
         hana: HanaConnector,
+        logger: Optional[logging.Logger] = None,
     ):
         self.postgres = postgres
         self.hana = hana
+        self.logger = logger
 
     def _read_sql_file(self, path: Path) -> str:
         if not path.exists():
@@ -35,7 +41,7 @@ class ProcessRunner:
             return f.read()
 
     def run(self, process: ProcessDefinition) -> pd.DataFrame:
-        logger = setup_logger(process.process_name, get_log_dir())
+        logger = self.logger or setup_logger(process.process_name, get_log_dir())
 
         logger.info(SEPARADOR)
         logger.info("🚀 Iniciando processo: %s", process.process_name)
@@ -70,7 +76,7 @@ class ProcessRunner:
         resultado_final: List[Dict[str, Any]] = []
 
         sql_hana = self._read_sql_file(process.hana_sql)
-        sql_hana = self.hana.qualify_sql_with_schema(sql_hana)
+        sql_hana = self.hana.render_sql_template(sql_hana)
 
         for idx, row in enumerate(rows, start=1):
             try:
@@ -95,7 +101,7 @@ class ProcessRunner:
                             **h,
                             "process_name": process.process_name,
                             "data_execucao": datetime.now(),
-                            "status_execucao": "SUCESSO",
+                            "status_execucao": StatusProcesso.SUCESSO.value,
                             "tempo_execucao": duracao,
                         }
                         resultado_final.append(merged)
@@ -110,7 +116,7 @@ class ProcessRunner:
                         **row,
                         "process_name": process.process_name,
                         "data_execucao": datetime.now(),
-                        "status_execucao": "SEM_RETORNO",
+                        "status_execucao": StatusProcesso.SEM_RETORNO.value,
                         "tempo_execucao": duracao,
                     }
                     resultado_final.append(merged)
@@ -121,23 +127,45 @@ class ProcessRunner:
                     )
 
                 logger.info(SEPARADOR)
-                self.hana.wait_between_queries()
+                if idx < len(rows):
+                    self.hana.wait_between_queries()
 
-            except Exception as e:
-                logger.error("❌ Erro ao executar SAP: %s", e)
-
+            except dbapi.ProgrammingError as e:
+                logger.error("❌ Erro de query SAP (SQL inválido) | item=%s: %s", idx, e)
                 merged = {
                     **row,
                     "process_name": process.process_name,
                     "data_execucao": datetime.now(),
-                    "status_execucao": "ERRO",
+                    "status_execucao": StatusProcesso.ERRO.value,
                     "mensagem_erro": str(e),
                 }
                 resultado_final.append(merged)
+                logger.info(SEPARADOR)
 
+            except dbapi.Error as e:
+                logger.error("❌ Erro de conexão SAP — abortando processo: %s", e)
+                raise
+
+            except Exception as e:
+                logger.error("❌ Erro inesperado | item=%s: %s", idx, e)
+                merged = {
+                    **row,
+                    "process_name": process.process_name,
+                    "data_execucao": datetime.now(),
+                    "status_execucao": StatusProcesso.ERRO.value,
+                    "mensagem_erro": str(e),
+                }
+                resultado_final.append(merged)
                 logger.info(SEPARADOR)
 
         df = pd.DataFrame(resultado_final)
+
+        df = df.rename(columns={
+            "chave_acesso":       "vtin_chave_acesso",
+            "data_processamento": "vtin_dt_proc",
+            "hora_processamento": "vtin_hr_proc",
+        })
+        df.columns = df.columns.str.upper()
 
         logger.info(SEPARADOR)
         logger.info("🏁 Processo finalizado: %s", process.process_name)

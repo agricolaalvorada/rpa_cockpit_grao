@@ -1,0 +1,55 @@
+# Definição declarativa dos processos de escrituração.
+# Caminhos SQL são relativos à pasta sql/. A ORDEM é preservada (afeta o payload/Teams).
+# parametros: ordem posicional dos '?' nas queries HANA.
+# O 3º parâmetro repete o contrato para filtrar a CTE 'ctr' por EBELN/VBELN.
+version: 1
+processos:
+  - process_name: V2_Consulta_Comp_CTRFIXO
+    postgres_sql: postgres/consultas/Consulta_Comp_CTRFIXO.sql
+    hana_sql: sap_hana/consultas/Consulta_Comp_CTRFIXO.sql
+    parametros: [doc_compra, numero_cockpit, doc_compra]
+    tabela_destino: complemento_notas_escrituracao
+    ativo: true
+    truncate_before_insert: false
+    drop_and_create: false
+    aa_file_id: 1211403
+
+  - process_name: V2_Consulta_Comp_CTR_S_FIXACAO
+    postgres_sql: postgres/consultas/Consulta_Comp_CTR_S_FIXACAO.sql
+    hana_sql: sap_hana/consultas/Consulta_Comp_CTR_S_FIXACAO.sql
+    parametros: [doc_compra, numero_cockpit, doc_compra]
+    tabela_destino: complemento_notas_escrituracao
+    ativo: true
+    truncate_before_insert: false
+    drop_and_create: false
+    aa_file_id: 1266717
+
+  - process_name: V2_Consulta_Comp_CTR_C_FIXACAO
+    postgres_sql: postgres/consultas/Consulta_Comp_CTR_C_FIXACAO.sql
+    hana_sql: sap_hana/consultas/Consulta_Comp_CTR_C_FIXACAO.sql
+    parametros: [doc_compra, numero_cockpit, doc_compra]
+    tabela_destino: complemento_notas_escrituracao
+    ativo: true
+    truncate_before_insert: false
+    drop_and_create: false
+    aa_file_id: 1233302
+
+  - process_name: V2_Consulta_Comp_ARMAZEN
+    postgres_sql: postgres/consultas/Consulta_Comp_ARMAZEN.sql
+    hana_sql: sap_hana/consultas/Consulta_Comp_ARMAZEN.sql
+    parametros: [n_contrato, numero_cockpit, n_contrato]
+    tabela_destino: complemento_notas_escrituracao
+    ativo: true
+    truncate_before_insert: false
+    drop_and_create: false
+    aa_file_id: 1310535
+
+  - process_name: V2_Consulta_Comp_VALOR
+    postgres_sql: postgres/consultas/Consulta_Comp_VALOR.sql
+    hana_sql: sap_hana/consultas/Consulta_Comp_VALOR.sql
+    parametros: [doc_compra, numero_cockpit, doc_compra]
+    tabela_destino: complemento_notas_escrituracao
+    ativo: true
+    truncate_before_insert: false
+    drop_and_create: false
+    aa_file_id: ~

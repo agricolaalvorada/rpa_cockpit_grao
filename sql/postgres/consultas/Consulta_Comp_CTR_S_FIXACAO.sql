@@ -6,19 +6,23 @@ SELECT
     cqsff.tipo,
     cqsff.n_contrato,
     cqsff.doc_compra,
+    cqsff.numero_cockpit AS numero_cockpit_original,
     cqsff.centro,
     cqsff.safra,
     cqsff.material,
     cqsff.cod_parceiro,
     cqsff.data_hora_ultima_atualizacao,
-    TRIM(split_cockpit) AS numero_cockpit,
-    cqsff.msg_rpa
+    split_cockpit.numero_cockpit,
+    cqsff.msg_rpa,
+    cqsff.chave_acesso,
+    cqsff.data_processamento,
+    cqsff.hora_processamento
 FROM prod.complemento_quantidade_sem_fixacao_fila cqsff
-CROSS JOIN LATERAL regexp_split_to_table(
-    COALESCE(cqsff.numero_cockpit, ''),
-    '\|'
+CROSS JOIN LATERAL (
+    SELECT DISTINCT TRIM(s) AS numero_cockpit
+    FROM regexp_split_to_table(COALESCE(cqsff.numero_cockpit, ''), '\|') AS s
+    WHERE TRIM(s) <> ''
 ) AS split_cockpit
 WHERE 1 = 1
-  AND cqsff.status IN ('12', '13', '9')
-  AND TRIM(split_cockpit) <> ''
+  AND cqsff.status IN ('12', '13', '9') -- '9' = aguardando confirmação de fixação (específico deste processo)
 ORDER BY cqsff.id;

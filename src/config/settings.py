@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+import warnings
+from datetime import date
 from pathlib import Path
 from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+# O campo `schema` (atributo de negócio) sombreia um atributo herdado do
+# BaseModel do Pydantic. O acesso `config.schema` funciona normalmente; apenas
+# silenciamos o aviso cosmético para não poluir a saída do monitor.
+warnings.filterwarnings("ignore", message=r'Field name "schema"', category=UserWarning)
 
 try:
     from dotenv import load_dotenv
@@ -59,11 +67,18 @@ def _get_env_bool(key: str, default: bool = False) -> bool:
     return value.lower() in {"1", "true", "yes", "sim", "y"}
 
 
+def _parse_anos(raw: str) -> tuple:
+    """Converte 'SAFRA_ANO' em tuple de ints. Aceita '2026' ou '2025,2026,2027'."""
+    parts = [x.strip() for x in raw.split(",") if x.strip().isdigit()]
+    return tuple(int(x) for x in parts) if parts else (date.today().year,)
+
+
 # =========================================================
-# CONFIGURAÇÕES
+# CONFIGURAÇÕES (Pydantic, imutáveis)
 # =========================================================
-@dataclass(frozen=True)
-class SapConfig:
+class SapConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     host: str
     port: int
     database: str
@@ -72,6 +87,8 @@ class SapConfig:
     password: str
     connection_delay: float = 1.0
     query_delay: float = 0.5
+    # Anos de safra usados no filtro IN das consultas HANA. Aceita 1 ou mais valores.
+    safra_anos: tuple = Field(default_factory=lambda: (date.today().year,))
 
     @classmethod
     def from_env(cls) -> "SapConfig":
@@ -84,6 +101,7 @@ class SapConfig:
             password=_get_env("SAP_PASSWORD", "") or "",
             connection_delay=_get_env_float("SAP_CONNECTION_DELAY", 1.0) or 1.0,
             query_delay=_get_env_float("SAP_QUERY_DELAY", 0.5) or 0.5,
+            safra_anos=_parse_anos(_get_env("SAFRA_ANO", "") or ""),
         )
 
     def validate(self) -> None:
@@ -108,8 +126,9 @@ class SapConfig:
             )
 
 
-@dataclass(frozen=True)
-class PostgresConfig:
+class PostgresConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     host: str
     port: int
     database: str
@@ -150,8 +169,58 @@ class PostgresConfig:
             )
 
 
-@dataclass(frozen=True)
-class LogConfig:
+class AutomationAnywhereConfig(BaseModel):
+    """Control Room do Automation Anywhere (A360) — para acionar robôs."""
+
+    model_config = ConfigDict(frozen=True)
+
+    control_room_url: str
+    username: str
+    password: str = ""
+    api_key: str = ""
+    verify_ssl: bool = True
+    timeout: float = 60.0
+    # Endpoint de autenticação do CR (alguns ambientes usam /v2/authentication).
+    auth_path: str = "/v1/authentication"
+    # Runners em ordem de preferência: candidato 1 → candidato 2 (fallback).
+    run_as_user_ids: tuple = ()
+
+    @classmethod
+    def from_env(cls) -> "AutomationAnywhereConfig":
+        ids_str = _get_env("AA_RUN_AS_USER_IDS", "") or ""
+        run_as_user_ids = tuple(
+            int(x.strip()) for x in ids_str.split(",") if x.strip().isdigit()
+        )
+        return cls(
+            control_room_url=_get_env("AA_CONTROL_ROOM_URL", "") or "",
+            username=_get_env("AA_USERNAME", "") or "",
+            password=_get_env("AA_PASSWORD", "") or "",
+            api_key=_get_env("AA_API_KEY", "") or "",
+            verify_ssl=_get_env_bool("AA_VERIFY_SSL", True),
+            timeout=_get_env_float("AA_TIMEOUT", 60.0) or 60.0,
+            auth_path=_get_env("AA_AUTH_PATH", "/v1/authentication") or "/v1/authentication",
+            run_as_user_ids=run_as_user_ids,
+        )
+
+    def validate(self) -> None:
+        missing: list[str] = []
+
+        if not self.control_room_url:
+            missing.append("AA_CONTROL_ROOM_URL")
+        if not self.username:
+            missing.append("AA_USERNAME")
+        if not self.password and not self.api_key:
+            missing.append("AA_PASSWORD ou AA_API_KEY")
+
+        if missing:
+            raise ValueError(
+                f"Variáveis obrigatórias do Automation Anywhere não encontradas no .env: {', '.join(missing)}"
+            )
+
+
+class LogConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     level: str
     dir: Path
     save_file: bool
@@ -167,4 +236,5 @@ class LogConfig:
 
 sap_config = SapConfig.from_env()
 postgres_config = PostgresConfig.from_env()
+aa_config = AutomationAnywhereConfig.from_env()
 log_config = LogConfig.from_env()

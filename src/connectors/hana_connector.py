@@ -5,8 +5,17 @@ import time
 from typing import Any, Iterable, Optional
 
 from hdbcli import dbapi
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from src.config.settings import SapConfig
+
+
+def _is_transient_hana_error(exc: BaseException) -> bool:
+    """Retorna True para erros de conexão/rede (recuperáveis por retry).
+    ProgrammingError (SQL inválido) não é recuperável — não deve fazer retry."""
+    if isinstance(exc, dbapi.ProgrammingError):
+        return False
+    return isinstance(exc, dbapi.Error)
 
 
 class HanaConnector:
@@ -77,13 +86,8 @@ class HanaConnector:
         finally:
             cursor.close()
 
-    def get_connection(self) -> dbapi.Connection:
-        if self.connection is None:
-            return self.connect()
-        return self.connection
-
     def test_connection(self) -> dict[str, Any]:
-        conn = self.get_connection()
+        conn = self.connect()
         cursor = conn.cursor()
 
         try:
@@ -121,12 +125,18 @@ class HanaConnector:
         finally:
             cursor.close()
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception(_is_transient_hana_error),
+        reraise=True,
+    )
     def execute_query(
         self,
         sql: str,
         params: Optional[Iterable[Any]] = None,
     ) -> list[dict[str, Any]]:
-        conn = self.get_connection()
+        conn = self.connect()
         cursor = conn.cursor()
 
         try:
@@ -162,8 +172,13 @@ class HanaConnector:
         if self.config.query_delay > 0:
             time.sleep(self.config.query_delay)
 
-    def qualify_sql_with_schema(self, sql: str) -> str:
-        return sql.format(schema=self.config.schema)
+    def render_sql_template(self, sql: str) -> str:
+        anos_str = ", ".join(str(a) for a in self.config.safra_anos)
+        return (
+            sql
+            .replace("{schema}", self.config.schema)
+            .replace("{anos}", anos_str)
+        )
 
     def close(self) -> None:
         if self.connection is not None:
