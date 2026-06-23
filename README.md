@@ -130,35 +130,65 @@ tests/
 
 **Fluxo de um ciclo:**
 
+Cada execução de `main.py` corresponde a **um ciclo completo**: lê todas as filas,
+consulta o SAP HANA, grava o resultado e encerra. A recorrência é externa
+(Agendador de Tarefas do Windows). O ciclo tem 4 fases principais: guard, truncate,
+loop de processos e notificação.
+
 ```
-Windows Task Scheduler acorda o monitor
+Windows Task Scheduler dispara o monitor (1 execução = 1 ciclo)
               │
               ▼
-  [GUARD AA] algum bot de escrituração rodando no Control Room?
-  ├─ SIM → aborta (sem truncar, sem consultar) — aguarda próxima execução
-  └─ NÃO → prossegue
+  ┌─ GUARD AA ────────────────────────────────────────────────────────┐
+  │  Verifica se algum bot de escrituração está ativo no Control Room │
+  │  SIM → aborta o ciclo inteiro (sem truncar, sem consultar SAP)   │
+  │         preserva os dados da execução em andamento               │
+  └───────────────────────────────────────────────────────────────────┘
+              │ NÃO — nenhum bot ativo, pode prosseguir
+              ▼
+  Trunca complemento_notas_escrituracao em dev e prod
+  (ciclo sempre começa do zero — reflete apenas o estado atual)
               │
               ▼
-PostgreSQL (fila prod)
-  └─► ProcessRunner.run(processo)
-        ├─ executa SQL Postgres → DataFrame de itens (cockpit explodido)
-        └─ para cada linha → HanaConnector.execute_query(SQL HANA, params)
-                                  │
-                                  ▼
-                        DataFrame consolidado
-                              │
-              ┌───────────────┴───────────────┐
-              ▼                               ▼
-   ResultadoService.exportar_excel()   ResultadoService.salvar_no_postgres()
-   data/output/{processo}/              UPSERT em dev/prod.complemento_notas_escrituracao
-   {processo}_YYYYMMDD_HHMMSS.xlsx
-              │
-              ▼ (se há aptas — SUCESSO)
-   AutomationAnywhereConnector.schedule_bot()
-   → pick_runner([8635, 9307]) → POST /v2/schedule/automations (+3 min)
+  ┌─ Para cada um dos 5 processos ativos (em ordem do YAML) ──────────┐
+  │                                                                    │
+  │  1. Lê a fila PostgreSQL (prod)                                    │
+  │     cockpits compostos "id1|id2|id3" → explodidos em linhas       │
+  │     individuais via CROSS JOIN LATERAL (1 linha = 1 cockpit)      │
+  │              │                                                     │
+  │              ▼                                                     │
+  │  2. Para cada cockpit → consulta SAP HANA (1 query por cockpit)   │
+  │     ├─ VIA_MIRO: MIRO_DOC → J_1BNFDOC.BELNR → DOCNUM             │
+  │     │   caminho determinístico; usado quando MIRO_DOC preenchido   │
+  │     └─ VIA_CPF_MATCH: CPF/CNPJ + QTDE (+ VALOR exceto VALOR)     │
+  │         fallback fuzzy usado quando MIRO_DOC está vazio           │
+  │              │                                                     │
+  │              ▼                                                     │
+  │  3. Consolida resultado por cockpit no DataFrame                   │
+  │     DOCNUM preenchido → SUCESSO   (nota escriturada, apta)        │
+  │     DOCNUM vazio      → SEM_RETORNO (NF ainda não chegou ao SAP)  │
+  │     Exceção           → ERRO                                      │
+  │              │                                                     │
+  │       ┌──────┴──────┐                                             │
+  │       ▼             ▼                                             │
+  │  Exporta Excel   UPSERT Postgres (somente linhas com DOCNUM)      │
+  │  data/output/    dev + prod.complemento_notas_escrituracao        │
+  │  {processo}/     83 colunas UPPERCASE, índice único               │
+  │  YYYYMMDD.xlsx        │                                           │
+  │                       ▼ (se há aptas no processo)                │
+  │                  Agenda bot AA +3 min                             │
+  │                  pick_runner([8635, 9307]) → POST /v2/schedule/   │
+  │                  aguarda a tabela estar gravada antes de disparar  │
+  └────────────────────────────────────────────────────────────────────┘
               │
               ▼
-   build_execution_summary() → log + Teams (Adaptive Card)
+  Consolida ExecutionSummary global
+  (total de linhas / aptas / pendentes / erros / duração por processo)
+              │
+              ▼
+  Log (loguru) + Adaptive Card → Teams via Power Automate
+  Header: verde (SUCESSO) | laranja (PARCIAL/SEM_DADOS) | vermelho (ERRO)
+  Card por processo com badge de status + barra de totais (TOTAL/APTAS/PENDENTES)
 ```
 
 ---
