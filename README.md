@@ -1,10 +1,9 @@
 # SAP-ESCRITURACAO-V2 — Monitor de escrituração de notas de grãos
 
-Pipeline de monitoramento em Python que, a cada ciclo, lê filas de pedidos/contratos
-pendentes no **PostgreSQL**, consulta o **SAP HANA** para verificar se a NF-e pode
-ser escriturada (cruzando `ZMMT0022` × `VTIN` por CPF/CNPJ + quantidade + valor),
-consolida o resultado, grava via UPSERT nos schemas `dev` e `prod`
-(`complemento_notas_escrituracao`), exporta um Excel e notifica o Teams via Power Automate.
+Pipeline em Python que, a cada ciclo, lê filas de pedidos/contratos pendentes no
+**PostgreSQL**, consulta o **SAP HANA** para identificar NFs que chegaram ao VTIN mas
+ainda **não foram escrituradas** (DOCNUM vazio no SAP), salva essas notas aptas no
+Postgres para o bot RPA processar, exporta um Excel e notifica o Teams via Power Automate.
 
 > **Status:** branch `refactor/escrituracao-v2` — Fase 1 (reestruturação em camadas) ✅
 > + Fase 2 (correções de negócio validadas em prod) ✅
@@ -18,17 +17,18 @@ consolida o resultado, grava via UPSERT nos schemas `dev` e `prod`
 Automatizar a verificação de elegibilidade de escrituração das notas de grãos,
 eliminando conferência manual:
 
-1. Ler as filas de contratos/pedidos pendentes no PostgreSQL (status `12`/`13`).
+1. Ler as filas de contratos/pedidos pendentes no PostgreSQL (status `12`/`13` ou `01`).
 2. Para cada item, consultar o SAP HANA: obter os valores esperados do cockpit
    via `ZMMT0022` e cruzar com a NF-e real no `VTIN` por CPF/CNPJ + quantidade + valor.
-3. **Veredito:** `DOCNUM` preenchido em `J_1BNFE_ACTIVE` = **escriturada (SUCESSO)**;
-   campo vazio = **ainda não escriturada (SEM_RETORNO)**.
-4. Persistir o resultado no PostgreSQL (UPSERT) + exportar Excel.
-5. Notificar o Teams com Adaptive Card separando notas aptas de pendentes.
+3. **Veredito:** `DOCNUM` **vazio** no SAP = NF **pendente de escrituração = APTA**
+   → salva no Postgres e o bot RPA processa; `DOCNUM` preenchido = já foi escriturada
+   → ignorada (não é o nosso caso).
+4. Persistir as notas aptas no PostgreSQL (UPSERT) + exportar Excel completo.
+5. Notificar o Teams com Adaptive Card e acionar o bot AA (+3 min) se há aptas.
 
-> **Match = apta a escriturar; sem match = não pode** (NF inexistente no VTIN ou
-> divergente do pedido — resposta de negócio válida, não erro de sistema). O status
-> `15` na fila Postgres **não garante escrituração** — a verdade está sempre no SAP.
+> **DOCNUM vazio = precisa ser escriturado.** Quando o bot conclui, o DOCNUM aparece
+> no SAP e a nota sai da fila no próximo ciclo. O status `15` na fila Postgres
+> **não garante escrituração** — a verdade está sempre no `DOCNUM` do SAP.
 
 ---
 
@@ -40,8 +40,8 @@ eliminando conferência manual:
 | **Banco de fila** | PostgreSQL 10.1.1.36:5432 · db `postgres` · schema `prod` |
 | **Banco HANA** | SAP HANA 10.2.3.244:30213 · db `ECP` · schema `SAPABAP1` · user `POWERBI` |
 | **Processos ativos** | `CTRFIXO` · `CTR_S_FIXACAO` · `CTR_C_FIXACAO` · `ARMAZEN` · `VALOR` |
-| **Critério de escrituração** | `DOCNUM` preenchido em `J_1BNFE_ACTIVE` |
-| **Tabela de resultado** | `complemento_notas_escrituracao` — 83 colunas UPPERCASE (schemas `dev` e `prod`) |
+| **Critério de aptidão** | `DOCNUM` **vazio** = pendente (apto) · preenchido = já escriturado (ignorado) |
+| **Tabela de resultado** | `complemento_notas_escrituracao` — 84 colunas UPPERCASE (schemas `dev` e `prod`) |
 | **Estratégia de gravação** | Truncate no início de cada ciclo + UPSERT com índice único por `(PROCESS_NAME, DOC_COMPRA, N_CONTRATO, NUMERO_COCKPIT, DOCNUM, STATUS_EXECUCAO)` |
 | **Export** | Excel em `data/output/{process_name}/` |
 | **Notificação** | Adaptive Card → Teams via `POWER_AUTOMATE_TEAMS_URL` (Power Automate) |
@@ -91,7 +91,7 @@ do Teams).
 | `V2_Consulta_Comp_ARMAZEN` | Venda / armazém | `n_contrato`, `numero_cockpit` | `prod.complemento_quantidade_deposito_fila` | `'12','13'` |
 | `V2_Consulta_Comp_VALOR` | Complemento de valor (CFIN) | `doc_compra`, `numero_cockpit` | `prod.complem_valor_fila` | `'01'` |
 
-Todos os resultados são gravados em `dev/prod.complemento_notas_escrituracao` (83 colunas UPPERCASE).
+Todos os resultados são gravados em `dev/prod.complemento_notas_escrituracao` (84 colunas UPPERCASE).
 
 As filas de quantidade usam `CROSS JOIN LATERAL regexp_split_to_table(numero_cockpit, '\|')` para
 explodir cockpits compostos em linhas individuais — uma consulta HANA por cockpit.
@@ -112,7 +112,7 @@ src/
   │                          # + ProcessDefinition (Pydantic) + protocols — sem I/O
   config/                    # SapConfig/PostgresConfig/LogConfig (Pydantic + from_env())
   │                          # + ProcessLoader (YAML) + process_definitions (shim de compat.)
-  │                          # + ddl_complemento.py (DDL fixo 83 cols UPPERCASE)
+  │                          # + ddl_complemento.py (DDL fixo 84 cols UPPERCASE)
   connectors/                # HanaConnector (retry automático) · PostgresConnector (DDL/DML/UPSERT)
   │                          # + AutomationAnywhereConnector (auth/CB/retry · guard · schedule)
   services/                  # ProcessRunner (fila → HANA → DataFrame)
@@ -165,15 +165,15 @@ Windows Task Scheduler dispara o monitor (1 execução = 1 ciclo)
   │              │                                                     │
   │              ▼                                                     │
   │  3. Consolida resultado por cockpit no DataFrame                   │
-  │     DOCNUM preenchido → SUCESSO   (nota escriturada, apta)        │
-  │     DOCNUM vazio      → SEM_RETORNO (NF ainda não chegou ao SAP)  │
+  │     DOCNUM vazio      → SUCESSO   (NF pendente de escrituração)   │
+  │     DOCNUM preenchido → descartado (já foi escriturada)           │
   │     Exceção           → ERRO                                      │
   │              │                                                     │
   │       ┌──────┴──────┐                                             │
   │       ▼             ▼                                             │
-  │  Exporta Excel   UPSERT Postgres (somente linhas com DOCNUM)      │
+  │  Exporta Excel   UPSERT Postgres (somente linhas SEM DOCNUM)      │
   │  data/output/    dev + prod.complemento_notas_escrituracao        │
-  │  {processo}/     83 colunas UPPERCASE, índice único               │
+  │  {processo}/     84 colunas UPPERCASE, índice único               │
   │  YYYYMMDD.xlsx        │                                           │
   │                       ▼ (se há aptas no processo)                │
   │                  Agenda bot AA +3 min                             │
@@ -240,7 +240,7 @@ Scripts de diagnóstico disponíveis na raiz (rodar direto pelo venv, não afeta
 | Schema de resultado | `dev` e `prod` (configurável via `TARGET_SCHEMAS` em `Application`) |
 | Tabela de resultado | `complemento_notas_escrituracao` |
 
-A tabela de resultado tem **83 colunas UPPERCASE**, schema pré-definido em
+A tabela de resultado tem **84 colunas UPPERCASE**, schema pré-definido em
 `src/config/ddl_complemento.py` — criada com todas as colunas mesmo quando não há
 registros aptos (evita tabela incompleta em ciclos onde todos retornam SEM_RETORNO).
 Os 5 processos compartilham a mesma tabela.
@@ -259,7 +259,7 @@ ON complemento_notas_escrituracao (
 );
 ```
 
-> ⚠️ Somente linhas com `DOCNUM` preenchido são gravadas — `DOCNUM` preenchido = nota escriturada.
+> ⚠️ Somente linhas com `DOCNUM` **vazio** são gravadas — `DOCNUM` vazio = nota pendente de escrituração (apta para o bot RPA processar). `DOCNUM` preenchido = já foi escriturada → não é gravada.
 
 ### Dicionário dos campos das filas
 
@@ -524,9 +524,9 @@ python -m venv .ESCR_SAPvenv
       `status_execucao` (`SUCESSO` / `SEM_RETORNO` / `ERRO`), `tempo_execucao`.
 5. **Exporta Excel** em `data/output/{process_name}/{process_name}_YYYYMMDD_HHMMSS.xlsx`.
 6. **Normaliza** o DataFrame (colunas UPPERCASE com `psycopg.sql.Identifier`).
-7. **Filtra aptas** (`DOCNUM` preenchido = nota escriturada) e faz **UPSERT** em
+7. **Filtra aptas** (`DOCNUM` vazio = nota pendente de escrituração) e faz **UPSERT** em
    `dev.complemento_notas_escrituracao` e `prod.complemento_notas_escrituracao`
-   (83 colunas; cria tabela se não existir).
+   (84 colunas; cria tabela se não existir).
 8. **Agenda bot AA** (`schedule_bot`) para +3 min se há aptas — após confirmação que
    a tabela já foi gravada.
 9. **Monta `ExecutionSummary`** com KPIs (aptas / pendentes / erros / duração).
@@ -583,9 +583,16 @@ Itens já corrigidos e validados nos sistemas reais:
 - ✅ `YEAR(VTIN_DT_EMISSAO)` corrigido de `VTIN_DT_CRIACAO` (data de entrada no sistema)
 - ✅ `UNION ALL VIA_MIRO + VIA_CPF_MATCH` em todos os 5 SQLs HANA — caminho determinístico
   (MIRO_DOC → J_1BNFDOC → DOCNUM) + fallback fuzzy (CPF+QTDE+VALOR quando MIRO_DOC vazio)
-- ✅ DDL fixo 83 colunas UPPERCASE (`src/config/ddl_complemento.py`) — tabela sempre criada com
-  todas as colunas, mesmo quando nenhum registro retorna apto no ciclo
-- ✅ Filtro por `DOCNUM` em vez de `status_execucao == SUCESSO` — regra de negócio: DOCNUM preenchido = escriturada
+- ✅ DDL fixo 84 colunas UPPERCASE (`src/config/ddl_complemento.py`) — tabela sempre criada com
+  todas as colunas, mesmo quando nenhum registro retorna apto no ciclo; +1 coluna `CRENAM`
+- ✅ Campo `CRENAM` nos 5 SQLs HANA + DDL — SAP user que postou o documento fiscal
+  (`J_1BNFDOC.CRENAM`); adicionado nas 3 posições por arquivo (CTE, VIA_MIRO, VIA_CPF_MATCH)
+- ✅ **Lógica de aptidão CORRIGIDA** — `DOCNUM` **vazio** = apto (pendente de escrituração);
+  preenchido = já foi escriturado → ignorado. VIA_MIRO: `INNER JOIN J_1BNFDOC` → `LEFT JOIN`
+  + `WHERE doc.DOCNUM IS NULL OR doc.DOCNUM = ''`. VIA_CPF_MATCH: `AND (vtin_fallback.DOCNUM IS NULL
+  OR vtin_fallback.DOCNUM = '')`. Python `df_aptas`: `isna()|==''` em vez de `notna()&!=''`
+- ✅ Flag `AA_CALL_RPA` no `.env` — `false` desabilita guard check + agendamento de bots sem
+  interromper o ciclo (consulta HANA, salva Postgres, notifica Teams)
 - ✅ **Teams layout Opção B** — header com cor dinâmica por status (SUCESSO=verde, ERRO=vermelho, PARCIAL=laranja),
   card por processo com badge colorido, barra de totais com 3 mini-KPIs
 - ✅ **5º processo VALOR** — novo tipo `V2_Consulta_Comp_VALOR` lendo `prod.complem_valor_fila`;
@@ -605,8 +612,10 @@ Pendente:
 
 ## 15. Pontos de atenção (gotchas)
 
-- **Status `15` na fila ≠ escriturado.** Em validação em massa (585 itens): apenas
-  75% tinham `DOCNUM` preenchido. Critério real = `DOCNUM` no SAP.
+- **`DOCNUM` vazio = apto; preenchido = já feito.** A tabela guarda notas PENDENTES,
+  não confirmadas. Quando o bot escritura, o `DOCNUM` aparece no SAP e a nota sai da
+  fila no próximo ciclo. Status `15` na fila Postgres **não garante escrituração** —
+  validação em massa (585 itens): apenas 75% tinham `DOCNUM`. Critério real = SAP.
 - **Produtor rural:** CPF fica no campo `STCD2` (não `STCD1`), com zeros à esquerda
   no VTIN — só casa com `LTRIM`.
 - **`PONUMBER` descartado** como elo NF↔pedido em produtor rural (~93% vazio).
