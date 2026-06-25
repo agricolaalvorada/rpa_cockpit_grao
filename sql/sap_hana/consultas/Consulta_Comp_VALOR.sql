@@ -164,7 +164,7 @@ SELECT
 FROM zmmt_base
 INNER JOIN ctr
     ON ctr.EBELN = zmmt_base.CONTRATO
-INNER JOIN J_1BNFDOC doc
+LEFT JOIN J_1BNFDOC doc
     ON doc.BELNR  = zmmt_base.MIRO_DOC
    AND doc.GJAHR  = zmmt_base.MIRO_ANO
    AND doc.DIRECT = '1'
@@ -183,6 +183,7 @@ LEFT JOIN "/VTIN/NFEIT" item
     ON item.NFEID = vxr.ID
 WHERE zmmt_base.MIRO_DOC IS NOT NULL
   AND zmmt_base.MIRO_DOC != ''
+  AND (doc.DOCNUM IS NULL OR doc.DOCNUM = '')
 
 UNION ALL
 
@@ -251,4 +252,5 @@ INNER JOIN vtin_fallback
    AND zmmt_base.QTDE IS NOT NULL
    AND ROUND(zmmt_base.QTDE, 3) = ROUND(vtin_fallback.VTIN_QTDE, 3)
    AND vtin_fallback.VTIN_DT_EMISSAO >= ADD_DAYS(TO_DATE(zmmt_base."DATA", 'YYYYMMDD'), -90)
-WHERE YEAR(vtin_fallback.VTIN_DT_EMISSAO) IN ({anos});
+WHERE YEAR(vtin_fallback.VTIN_DT_EMISSAO) IN ({anos})
+  AND (vtin_fallback.DOCNUM IS NULL OR vtin_fallback.DOCNUM = '');

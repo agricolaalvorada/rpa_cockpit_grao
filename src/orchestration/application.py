@@ -324,7 +324,7 @@ class Application:
                         (c for c in df.columns if c.upper() == "DOCNUM"), None
                     )
                     df_aptas = (
-                        df[df[_docnum_col].notna() & (df[_docnum_col].astype(str).str.strip() != "")]
+                        df[df[_docnum_col].isna() | (df[_docnum_col].astype(str).str.strip() == "")]
                         if _docnum_col is not None
                         else pd.DataFrame()
                     )

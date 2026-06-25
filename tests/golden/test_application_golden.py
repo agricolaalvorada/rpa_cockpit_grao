@@ -78,7 +78,7 @@ def _app(tmp_path, runner, rec):
 
 def test_application_sucesso_golden(tmp_path):
     df = pd.DataFrame([
-        {"doc_compra": "4500451189", "DOCNUM": "3038001", "VTIN_QTDE": 7682.0,
+        {"doc_compra": "4500451189", "DOCNUM": "", "VTIN_QTDE": 7682.0,
          "status_execucao": "SUCESSO"},
     ])
     runner = _FakeRunner(df)

@@ -167,7 +167,7 @@ SELECT
 FROM zmmt_base
 INNER JOIN ctr
     ON ctr.EBELN = LPAD(zmmt_base.CONTRATO, 10, '0')
-INNER JOIN J_1BNFDOC doc
+LEFT JOIN J_1BNFDOC doc
     ON doc.BELNR  = zmmt_base.MIRO_DOC
    AND doc.GJAHR  = zmmt_base.MIRO_ANO
    AND doc.DIRECT = '1'
@@ -186,6 +186,7 @@ LEFT JOIN "/VTIN/NFEIT" item
     ON item.NFEID = vxr.ID
 WHERE zmmt_base.MIRO_DOC IS NOT NULL
   AND zmmt_base.MIRO_DOC != ''
+  AND (doc.DOCNUM IS NULL OR doc.DOCNUM = '')
 
 UNION ALL
 
@@ -266,4 +267,5 @@ INNER JOIN vtin_fallback
         OR ROUND(zmmt_base.VALOR, 2) = ROUND(vtin_fallback.A_VTIN_VLR_NF, 2)
    )
 WHERE (zmmt_base.MIRO_DOC IS NULL OR zmmt_base.MIRO_DOC = '')
-  AND YEAR(vtin_fallback.VTIN_DT_EMISSAO) IN ({anos});
+  AND YEAR(vtin_fallback.VTIN_DT_EMISSAO) IN ({anos})
+  AND (vtin_fallback.DOCNUM IS NULL OR vtin_fallback.DOCNUM = '');
