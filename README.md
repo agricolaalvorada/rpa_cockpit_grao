@@ -417,6 +417,7 @@ AA_AUTH_PATH=/v2/authentication  # /v1/authentication em alguns ambientes
 AA_VERIFY_SSL=true
 AA_TIMEOUT=60
 AA_RUN_AS_USER_IDS=        # IDs dos runners em ordem de preferência (ex.: 8635,9307)
+AA_CALL_RPA=true           # true=habilita guard check + agendamento de bots; false=desabilita (modo consulta)
 
 # --- Log ---
 LOG_LEVEL=INFO

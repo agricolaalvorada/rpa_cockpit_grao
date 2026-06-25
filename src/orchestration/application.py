@@ -248,8 +248,9 @@ class Application:
 
             # Guard AA: se algum bot de escrituração estiver rodando, abortar o ciclo inteiro.
             # Não truncar, não consultar — aguardar a próxima execução agendada pelo Windows.
+            # Ignorado quando AA_CALL_RPA=false.
             aa_file_ids = [p.aa_file_id for p in processos if p.aa_file_id]
-            if _aa_guard_check(logger=logger, file_ids=aa_file_ids):
+            if aa_config.call_rpa and _aa_guard_check(logger=logger, file_ids=aa_file_ids):
                 finished_at = self._now()
                 payload = build_execution_summary(
                     process_name=process_name,
@@ -367,12 +368,18 @@ class Application:
                         logger.info(SEPARADOR)
 
                     # Agendamento AA — uma vez por processo, após salvar em todos os schemas.
-                    if not df_aptas.empty and processo.aa_file_id and aa_config.run_as_user_ids:
+                    # Ignorado quando AA_CALL_RPA=false.
+                    if aa_config.call_rpa and not df_aptas.empty and processo.aa_file_id and aa_config.run_as_user_ids:
                         aa_runner_id = _schedule_aa_safe(
                             logger=logger,
                             file_id=processo.aa_file_id,
                             runner_ids=list(aa_config.run_as_user_ids),
                             delay_minutes=3,
+                        )
+                    elif not aa_config.call_rpa and not df_aptas.empty and processo.aa_file_id:
+                        logger.info(
+                            "⏭️ AA: agendamento desabilitado (AA_CALL_RPA=false) | processo=%s | aptas=%s",
+                            processo.process_name, len(df_aptas),
                         )
 
                     rows_aptas = len(df_aptas)

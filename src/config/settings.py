@@ -184,6 +184,8 @@ class AutomationAnywhereConfig(BaseModel):
     auth_path: str = "/v1/authentication"
     # Runners em ordem de preferência: candidato 1 → candidato 2 (fallback).
     run_as_user_ids: tuple = ()
+    # Feature flag: quando False, desabilita guard check e agendamento de bots.
+    call_rpa: bool = True
 
     @classmethod
     def from_env(cls) -> "AutomationAnywhereConfig":
@@ -200,6 +202,7 @@ class AutomationAnywhereConfig(BaseModel):
             timeout=_get_env_float("AA_TIMEOUT", 60.0) or 60.0,
             auth_path=_get_env("AA_AUTH_PATH", "/v1/authentication") or "/v1/authentication",
             run_as_user_ids=run_as_user_ids,
+            call_rpa=_get_env_bool("AA_CALL_RPA", True),
         )
 
     def validate(self) -> None:
