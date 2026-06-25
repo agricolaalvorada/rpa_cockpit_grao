@@ -104,7 +104,7 @@ vtin_fallback AS (
       AND vxr.MANSTA NOT IN ('03', '04')
 )
 
--- Caminho primario: MIRO_DOC → J_1BNFDOC → DOCNUM (determinístico, sem match fuzzy)
+-- Caminho primario: MIRO_DOC → ETAPA_PROC (GJAHR real) → J_1BNFDOC → DOCNUM
 SELECT
     zmmt_base.MANDT         AS ZMMT_MANDT,
     zmmt_base.ID            AS ZMMT_ID,
@@ -164,20 +164,19 @@ SELECT
 FROM zmmt_base
 INNER JOIN ctr
     ON ctr.EBELN = zmmt_base.CONTRATO
+INNER JOIN "/VTIN/ETAPA_PROC" etp
+    ON etp.NUM_DOC = zmmt_base.MIRO_DOC
+   AND etp.TCODE  = 'MIRO'
 LEFT JOIN J_1BNFDOC doc
-    ON doc.BELNR  = zmmt_base.MIRO_DOC
-   AND doc.GJAHR  = zmmt_base.MIRO_ANO
+    ON doc.BELNR  = etp.NUM_DOC
+   AND doc.GJAHR  = etp.GJAHR
    AND doc.DIRECT = '1'
 LEFT JOIN J_1BNFE_ACTIVE act
     ON act.DOCNUM = doc.DOCNUM
    AND act.DIRECT = '1'
    AND act.CANCEL = ''
 LEFT JOIN "/VTIN/_XML_REC" vxr
-    ON vxr.NFYEAR  = act.NFYEAR
-   AND vxr.NFMONTH = act.NFMONTH
-   AND vxr.NFNUM9  = act.NFNUM9
-   AND vxr.STCD1   = act.STCD1
-   AND vxr.CDV     = act.CDV
+    ON vxr.ID     = etp.ID
    AND vxr.CODESTA IN ('100')
 LEFT JOIN "/VTIN/NFEIT" item
     ON item.NFEID = vxr.ID
