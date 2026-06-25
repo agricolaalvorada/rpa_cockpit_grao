@@ -166,6 +166,8 @@ class Application:
     def _resolve_teams_url(self) -> str:
         if self._teams_url is not None:
             return self._teams_url
+        if not _get_env_bool("TEAMS_NOTIFY", True):
+            return ""
         return os.getenv("POWER_AUTOMATE_TEAMS_URL", "").strip()
 
     def run(self) -> Dict[str, Any]:
