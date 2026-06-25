@@ -238,9 +238,6 @@ class Application:
 
                 log_execution_summary(logger, payload)
 
-                if teams_url:
-                    notify_teams_safe(logger=logger, url=teams_url, execution_summary=payload)
-
                 print(json.dumps(payload, ensure_ascii=False, indent=4))
                 return payload
 
@@ -262,8 +259,6 @@ class Application:
                     processos_com_erro=[],
                 )
                 log_execution_summary(logger, payload)
-                if teams_url:
-                    notify_teams_safe(logger=logger, url=teams_url, execution_summary=payload)
                 print(json.dumps(payload, ensure_ascii=False, indent=4))
                 return payload
 
@@ -447,8 +442,11 @@ class Application:
 
             log_execution_summary(logger, payload)
 
-            if teams_url:
+            total_aptas = payload.get("summary", {}).get("total_notas_aptas", 0)
+            if teams_url and total_aptas > 0:
                 notify_teams_safe(logger=logger, url=teams_url, execution_summary=payload)
+            elif teams_url and total_aptas == 0:
+                logger.info("⏭️ Teams: sem notas aptas neste ciclo — notificação suprimida")
 
             print(json.dumps(payload, ensure_ascii=False, indent=4))
             return payload
@@ -477,7 +475,8 @@ class Application:
             logger.exception("❌ Falha na execução principal: %s", exc)
             log_execution_summary(logger, payload)
 
-            if teams_url:
+            total_aptas = payload.get("summary", {}).get("total_notas_aptas", 0)
+            if teams_url and total_aptas > 0:
                 notify_teams_safe(logger=logger, url=teams_url, execution_summary=payload)
 
             print(json.dumps(payload, ensure_ascii=False, indent=4))
