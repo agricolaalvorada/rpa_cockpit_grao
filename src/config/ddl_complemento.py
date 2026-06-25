@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# Schema fixo da tabela de resultado — 83 colunas.
+# Schema fixo da tabela de resultado — 84 colunas.
 # Usado em ResultadoService.salvar_no_postgres(predefined_columns=...) para garantir
 # que a tabela exista com o schema completo mesmo quando todos os ciclos retornam
 # SEM_RETORNO (sem linhas HANA no DataFrame).
@@ -66,6 +66,7 @@ COMPLEMENTO_NOTAS_DDL: dict[str, str] = {
     "LOCAL":                       "TEXT",
     "DT_CRIACAO":                  "TEXT",
     "DOCNUM":                      "TEXT",
+    "CRENAM":                      "TEXT",
     "PESO_LIQUIDO":                "NUMERIC(18,6)",
     "VLR_NF":                      "NUMERIC(18,6)",
     "VTIN_STATUS":                 "TEXT",
