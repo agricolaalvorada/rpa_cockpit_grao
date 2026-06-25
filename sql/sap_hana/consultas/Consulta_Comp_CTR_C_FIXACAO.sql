@@ -183,6 +183,12 @@ LEFT JOIN "/VTIN/NFEIT" item
     ON item.NFEID = vxr.ID
 WHERE zmmt_base.MIRO_DOC IS NOT NULL
   AND zmmt_base.MIRO_DOC != ''
+  AND doc.NTGEW IS NOT NULL
+  AND ROUND(doc.NTGEW, 3) = ROUND(zmmt_base.QTDE, 3)
+  AND (
+      ROUND(doc.NFTOT, 2) = ROUND(zmmt_base.VALOR, 2)
+      OR ROUND(doc.NFTOT, 0) = ROUND(zmmt_base.VALOR, 0)
+  )
   AND (doc.DOCNUM IS NULL OR doc.DOCNUM = '')
 
 UNION ALL
