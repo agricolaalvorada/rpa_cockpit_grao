@@ -5,10 +5,10 @@ Pipeline em Python que, a cada ciclo, lê filas de pedidos/contratos pendentes n
 ainda **não foram escrituradas** (DOCNUM vazio no SAP), salva essas notas aptas no
 Postgres para o bot RPA processar, exporta um Excel e notifica o Teams via Power Automate.
 
-> **Status:** branch `refactor/escrituracao-v2` — Fase 1 (reestruturação em camadas) ✅
+> **Status:** `main` — Fase 1 (reestruturação em camadas) ✅
 > + Fase 2 (correções de negócio validadas em prod) ✅
-> + Integração Automation Anywhere ✅. **5 processos ativos. 78 testes.**
-> **PR ainda não aberto.**
+> + Integração Automation Anywhere ✅
+> + Correções VIA_MIRO (GJAHR + validação NTGEW/NFTOT) ✅. **5 processos ativos. 78 testes.**
 
 ---
 
@@ -158,8 +158,8 @@ Windows Task Scheduler dispara o monitor (1 execução = 1 ciclo)
   │              │                                                     │
   │              ▼                                                     │
   │  2. Para cada cockpit → consulta SAP HANA (1 query por cockpit)   │
-  │     ├─ VIA_MIRO: MIRO_DOC → J_1BNFDOC.BELNR → DOCNUM             │
-  │     │   caminho determinístico; usado quando MIRO_DOC preenchido   │
+  │     ├─ VIA_MIRO: MIRO_DOC → J_1BNFDOC (GJAHR IN {anos})          │
+  │     │   NTGEW=QTDE e NFTOT=VALOR devem bater para aceitar          │
   │     └─ VIA_CPF_MATCH: CPF/CNPJ + QTDE (+ VALOR exceto VALOR)     │
   │         fallback fuzzy usado quando MIRO_DOC está vazio           │
   │              │                                                     │
@@ -598,6 +598,14 @@ Itens já corrigidos e validados nos sistemas reais:
 - ✅ **5º processo VALOR** — novo tipo `V2_Consulta_Comp_VALOR` lendo `prod.complem_valor_fila`;
   match por CPF+QTDE sem filtro de valor (ZMMT0022.VALOR = centavos do complemento, não o total da NF)
 - ✅ Integração Automation Anywhere — guard check antes do truncate + agendamento +3min após aptas salvas
+- ✅ **VIA_MIRO GJAHR corrigido** — substituído `GJAHR = MIRO_ANO` (fixado em 2026) por `TO_INTEGER(GJAHR) IN ({anos})`
+  em todos os 4 SQLs de CTR/ARMAZEN; elimina dependência de `/VTIN/ETAPA_PROC` (tabela incompleta em prod).
+  `SAFRA_ANO=2026,2027` no `.env` expande automaticamente para `IN (2026, 2027)` em VIA_MIRO e VIA_CPF_MATCH.
+- ✅ **VIA_MIRO validação NTGEW/NFTOT** — `ROUND(doc.NTGEW,3) = ROUND(zmmt.QTDE,3)` e
+  `ROUND(doc.NFTOT,2) = ROUND(zmmt.VALOR,2)` adicionados ao WHERE do VIA_MIRO como desambiguação quando o mesmo
+  BELNR aparece em múltiplos anos fiscais; evita match espúrio por reutilização de BELNR no SAP.
+- ✅ **VIA_MIRO removido do processo VALOR** — `ZMMT0022.VALOR` em registros CFIN é o complemento em centavos,
+  impossível de comparar com `J_1BNFDOC.NFTOT` (total da NF); somente VIA_CPF_MATCH (CPF+QTDE, sem valor) permanece.
 
 Pendente:
 
@@ -634,9 +642,11 @@ Pendente:
   VIA_CPF_MATCH foi removido neste processo — substituído por âncora de data (±90 dias).
   **Nunca reaplicar filtro de valor ao processo VALOR.** Nos demais processos
   (CTRFIXO, CTR_S, CTR_C, ARMAZEN) o filtro de valor é necessário e correto.
-- **VIA_MIRO falha para CFIN:** `J_1BNFDOC.GJAHR ≠ ZMMT0022.MIRO_ANO` para complementos
-  de valor — o BELNR existe em outros anos no SAP, não no ano do MIRO_ANO. O path
-  VIA_MIRO está incluído no SQL mas não resolve para CFIN na prática.
+- **VIA_MIRO não existe no processo VALOR:** `ZMMT0022.VALOR` para registros CFIN representa centavos do
+  complemento — impossível comparar com `J_1BNFDOC.NFTOT`. O SQL de VALOR usa somente VIA_CPF_MATCH.
+- **VIA_MIRO desambigua por GJAHR IN {anos}:** o mesmo BELNR pode aparecer em anos fiscais diferentes no SAP.
+  A combinação `GJAHR IN ({anos})` + `NTGEW=QTDE` + `NFTOT=VALOR` garante que o documento correto é selecionado.
+  Adicionar `SAFRA_ANO=2026,2027` no `.env` quando necessário processar NFs de mais de um ano.
 
 ---
 

@@ -18,7 +18,7 @@ import pandas as pd
 
 from src.config.ddl_complemento import COMPLEMENTO_NOTAS_DDL
 from src.config.process_definitions import get_processos_ativos
-from src.config.settings import aa_config, log_config, postgres_config, sap_config
+from src.config.settings import _get_env_bool, aa_config, log_config, postgres_config, sap_config
 from src.connectors.automation_anywhere_connector import AutomationAnywhereConnector
 from src.domain.enums import StatusProcesso
 from src.connectors.hana_connector import HanaConnector
